@@ -1,0 +1,81 @@
+plugins {
+    id 'fabric-loom' version '1.13-SNAPSHOT'
+}
+
+group = project.maven_group
+version = project.mod_version
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url = 'https://maven.fabricmc.net/' }
+    mavenCentral()
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        browsecraft {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+sourceSets {
+    gametest {
+        java.srcDir 'src/gametest/java'
+        resources.srcDir 'src/gametest/resources'
+        compileClasspath += sourceSets.main.output + sourceSets.client.output + sourceSets.main.compileClasspath + sourceSets.client.compileClasspath
+        runtimeClasspath += output + compileClasspath + sourceSets.main.runtimeClasspath + sourceSets.client.runtimeClasspath
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    modImplementation "net.fabricmc.fabric-api:fabric-api-base:1.0.5+4ebb5c083e"
+    modImplementation "net.fabricmc.fabric-api:fabric-command-api-v2:2.4.7+6b42a6003e"
+    modImplementation "net.fabricmc.fabric-api:fabric-key-binding-api-v1:1.1.7+4fc5413f3e"
+    modImplementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:2.6.15+4ebb5c083e"
+    modImplementation "net.fabricmc.fabric-api:fabric-rendering-v1:16.2.10+0290ad933e"
+    modImplementation "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:4.3.5+bfe9fcf43e"
+
+    modRuntimeOnly "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    gametestImplementation "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:4.3.5+bfe9fcf43e"
+
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand(version: project.version)
+    }
+}
+
+fabricApi {
+    configureTests {
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = true
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
