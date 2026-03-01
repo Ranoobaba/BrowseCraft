@@ -151,6 +151,101 @@ async def test_imagine_fallback_without_chat_submitter_emits_error_response() ->
 
 
 @pytest.mark.asyncio
+async def test_imagine_tripo_pipeline_loads_schematic_and_sets_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    schem_bytes = _minimal_schem_bytes()
+    ws = FakeWebSocketManager()
+    submitted_chat_requests: list[Any] = []
+
+    class FakeHttpResponse:
+        def __init__(self, *, json_payload: dict[str, Any] | None = None, content: bytes = b"") -> None:
+            self._json_payload = json_payload
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            if self._json_payload is None:
+                raise RuntimeError("JSON payload requested for non-JSON response")
+            return self._json_payload
+
+    class FakeHttpClient:
+        def __init__(self, *_: Any, **__: Any) -> None:
+            self.text_poll_count = 0
+
+        async def __aenter__(self) -> FakeHttpClient:
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, exc_tb: Any) -> None:
+            return None
+
+        async def post(self, url: str, headers: dict[str, str], json: dict[str, Any]) -> FakeHttpResponse:
+            assert headers["Authorization"] == "Bearer test-tripo-key"
+            assert url == "https://api.tripo3d.ai/v2/openapi/task"
+            if json["type"] == "text_to_model":
+                assert json["prompt"].startswith("dragon statue")
+                return FakeHttpResponse(json_payload={"task_id": "text-task-1"})
+            if json["type"] == "convert_model":
+                assert json["original_model_task_id"] == "text-task-1"
+                assert json["format"] == "schematic"
+                assert json["minecraft_version"] == "1_21"
+                return FakeHttpResponse(json_payload={"task_id": "convert-task-1"})
+            raise AssertionError(f"Unexpected task type: {json['type']}")
+
+        async def get(self, url: str, headers: dict[str, str] | None = None) -> FakeHttpResponse:
+            if url == "https://api.tripo3d.ai/v2/openapi/task/text-task-1":
+                self.text_poll_count += 1
+                if self.text_poll_count == 1:
+                    return FakeHttpResponse(json_payload={"status": "running"})
+                return FakeHttpResponse(json_payload={"status": "success"})
+            if url == "https://api.tripo3d.ai/v2/openapi/task/convert-task-1":
+                return FakeHttpResponse(json_payload={"status": "success", "model": "https://downloads.example/model.schem"})
+            if url == "https://downloads.example/model.schem":
+                return FakeHttpResponse(content=schem_bytes)
+            raise AssertionError(f"Unexpected URL: {url}")
+
+    async def fake_sleep(_: float) -> None:
+        return None
+
+    async def fake_chat_submitter(request: Any) -> Any:
+        submitted_chat_requests.append(request)
+        return SimpleNamespace(chat_id="chat-1", status="accepted")
+
+    monkeypatch.setattr(demo_pipelines.httpx, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(demo_pipelines.asyncio, "sleep", fake_sleep)
+
+    pipelines = DemoPipelines(
+        websocket_manager=ws,
+        browser_use_api_key=None,
+        browser_use_llm="browser-use-llm",
+        browser_use_skill_id=None,
+        tripo_api_key="test-tripo-key",
+        chat_submitter=fake_chat_submitter,
+    )
+
+    accepted = await pipelines.submit_imagine(ImagineRequest(client_id="client-tripo", prompt="dragon statue"))
+    assert accepted.status == "accepted"
+    await _drain_tasks(pipelines)
+
+    assert submitted_chat_requests == []
+    statuses = _statuses(ws)
+    assert statuses == [
+        "🧊 Generating 3D model...",
+        "⏳ Processing (may take 30-60s)...",
+        "📦 Converting to schematic...",
+        "📐 Loaded 4 blocks into preview",
+        "✓ Done",
+    ]
+    assert len(ws.tool_requests) == 1
+    client_id, tool_name, params = ws.tool_requests[0]
+    assert client_id == "client-tripo"
+    assert tool_name == "set_plan"
+    assert len(params["placements"]) == 4
+
+
+@pytest.mark.asyncio
 async def test_search_pipeline_without_api_key_emits_failure_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
