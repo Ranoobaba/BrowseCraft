@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 import time
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -32,8 +33,9 @@ EXPECTED_TOOL_NAMES = {
 
 
 class FakeAnthropicMessages:
-    def __init__(self, responses: list[Any]) -> None:
+    def __init__(self, responses: list[Any], *, wrapped_stream: bool = False) -> None:
         self._responses = list(responses)
+        self._wrapped_stream = wrapped_stream
         self.calls: list[dict[str, Any]] = []
 
     def stream(self, **kwargs: Any) -> Any:
@@ -41,6 +43,8 @@ class FakeAnthropicMessages:
         if not self._responses:
             raise AssertionError("Unexpected anthropic stream call")
         response = self._responses.pop(0)
+        if self._wrapped_stream:
+            return _WrappedFakeAnthropicStreamManager(response)
         return _FakeAnthropicStreamManager(response)
 
     async def create(self, **kwargs: Any) -> Any:
@@ -49,8 +53,8 @@ class FakeAnthropicMessages:
 
 
 class FakeAnthropicClient:
-    def __init__(self, responses: list[Any]) -> None:
-        self.messages = FakeAnthropicMessages(responses)
+    def __init__(self, responses: list[Any], *, wrapped_stream: bool = False) -> None:
+        self.messages = FakeAnthropicMessages(responses, wrapped_stream=wrapped_stream)
         self.closed = False
 
     async def close(self) -> None:
@@ -73,24 +77,67 @@ class _FakeAnthropicStream:
         self._response = response
 
     async def __aiter__(self):
-        for block in getattr(self._response, "content", []):
-            if getattr(block, "type", None) != "text":
+        for index, block in enumerate(getattr(self._response, "content", [])):
+            block_type = getattr(block, "type", None)
+            if block_type not in {"text", "tool_use"}:
                 continue
-            text = getattr(block, "text", "")
-            if not text:
-                continue
-            midpoint = max(1, len(text) // 2)
-            chunks = [text[:midpoint], text[midpoint:]]
-            for chunk in chunks:
-                if not chunk:
-                    continue
-                yield SimpleNamespace(
-                    type="content_block_delta",
-                    delta=SimpleNamespace(type="text_delta", text=chunk),
+            if block_type == "text":
+                start_block = SimpleNamespace(type="text", text="")
+            else:
+                start_block = SimpleNamespace(
+                    type="tool_use",
+                    id=getattr(block, "id", None),
+                    name=getattr(block, "name", None),
+                    input={},
                 )
+            yield SimpleNamespace(
+                type="content_block_start",
+                index=index,
+                content_block=start_block,
+            )
+            if block_type == "text":
+                text = getattr(block, "text", "")
+                midpoint = max(1, len(text) // 2)
+                chunks = [text[:midpoint], text[midpoint:]]
+                for chunk in chunks:
+                    if not chunk:
+                        continue
+                    yield SimpleNamespace(
+                        type="content_block_delta",
+                        index=index,
+                        delta=SimpleNamespace(type="text_delta", text=chunk),
+                    )
+            if block_type == "tool_use":
+                tool_input = json.dumps(getattr(block, "input", {}))
+                midpoint = max(1, len(tool_input) // 2)
+                chunks = [tool_input[:midpoint], tool_input[midpoint:]]
+                for chunk in chunks:
+                    if not chunk:
+                        continue
+                    yield SimpleNamespace(
+                        type="content_block_delta",
+                        index=index,
+                        delta=SimpleNamespace(type="input_json_delta", partial_json=chunk),
+                    )
+            yield SimpleNamespace(type="content_block_stop", index=index)
 
     async def get_final_message(self) -> Any:
         return self._response
+
+
+class _WrappedFakeAnthropicStreamManager:
+    def __init__(self, response: Any) -> None:
+        self._response = response
+
+    async def __aenter__(self):
+        async def wrapped():
+            async for event in _FakeAnthropicStream(self._response):
+                yield event
+
+        return wrapped()
+
+    async def __aexit__(self, exc_type: Any, exc: Any, exc_tb: Any) -> None:
+        return None
 
 
 class FakeWebSocketManager:
@@ -328,9 +375,11 @@ async def test_place_blocks_tool_routes_through_websocket_manager_and_emits_chat
     assert isinstance(first_call["system"], list)
     assert first_call["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert first_call["tools"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert first_call["tool_choice"] == {"type": "any"}
     assert {tool["name"] for tool in first_call["tools"]} == EXPECTED_TOOL_NAMES
     assert "Live player position for this request (authoritative)" in first_call["system"][0]["text"]
     assert "block_x=10, block_y=64, block_z=20" in first_call["system"][0]["text"]
+    assert "build_anchor_x=10, build_anchor_y=64, build_anchor_z=30" in first_call["system"][0]["text"]
 
     chat_responses = _messages_of_type(ws, "chat.response")
     assert len(chat_responses) == 1
@@ -660,7 +709,12 @@ async def test_set_plan_tool_routes_through_websocket_manager() -> None:
         anthropic_client_factory=lambda api_key: anthropic_client,
     )
 
-    await orchestrator._run_chat(chat_id="chat-plan", client_id="client-plan", user_message="plan a tower")
+    await orchestrator._run_chat(
+        chat_id="chat-plan",
+        client_id="client-plan",
+        user_message="plan a tower",
+        request_mode="plan",
+    )
 
     assert ws.tool_requests == [
         ("client-plan", "player_position", {}),
@@ -692,7 +746,12 @@ async def test_set_plan_tool_validation_rejects_empty_placements() -> None:
         anthropic_client_factory=lambda api_key: anthropic_client,
     )
 
-    await orchestrator._run_chat(chat_id="chat-plan-invalid", client_id="client-plan-invalid", user_message="plan")
+    await orchestrator._run_chat(
+        chat_id="chat-plan-invalid",
+        client_id="client-plan-invalid",
+        user_message="plan",
+        request_mode="plan",
+    )
 
     assert ws.tool_requests == [("client-plan-invalid", "player_position", {})]
 
@@ -739,8 +798,171 @@ async def test_streaming_delta_events_are_sent_over_websocket() -> None:
     deltas = _messages_of_type(ws, "chat.delta")
     assert len(deltas) >= 2
     assert deltas[-1]["payload"]["partial"] == "Streaming test response."
+    first_call = anthropic_client.messages.calls[0]
+    assert "tool_choice" not in first_call
     chat_responses = _messages_of_type(ws, "chat.response")
     assert chat_responses[0]["payload"]["message"] == "Streaming test response."
+
+
+@pytest.mark.asyncio
+async def test_build_intent_retries_when_model_replies_without_placement_tool() -> None:
+    anthropic_client = FakeAnthropicClient(
+        responses=[
+            _text_response("Done! I placed the platform."),
+            _tool_use_response(
+                "fill_region",
+                {
+                    "from_corner": {"x": 8, "y": 63, "z": 18},
+                    "to_corner": {"x": 12, "y": 63, "z": 22},
+                    "block_id": "minecraft:oak_planks",
+                },
+            ),
+            _text_response("Placed it."),
+        ]
+    )
+    ws = FakeWebSocketManager()
+    orchestrator = ChatOrchestrator(
+        anthropic_api_key="test-key",
+        websocket_manager=ws,
+        anthropic_client_factory=lambda api_key: anthropic_client,
+    )
+
+    await orchestrator._run_chat(
+        chat_id="chat-build-enforced",
+        client_id="client-build-enforced",
+        user_message="build a 5x5 oak plank platform right below me",
+    )
+
+    assert ws.tool_requests == [
+        ("client-build-enforced", "player_position", {}),
+        (
+            "client-build-enforced",
+            "fill_region",
+            {
+                "from_corner": {"x": 8, "y": 63, "z": 18},
+                "to_corner": {"x": 12, "y": 63, "z": 22},
+                "block_id": "minecraft:oak_planks",
+            },
+        ),
+    ]
+    assert len(anthropic_client.messages.calls) == 3
+    chat_responses = _messages_of_type(ws, "chat.response")
+    assert chat_responses[0]["payload"]["message"] == "Placed it."
+
+
+@pytest.mark.asyncio
+async def test_direct_build_rejects_preview_only_tools() -> None:
+    anthropic_client = FakeAnthropicClient(
+        responses=[
+            _tool_use_response(
+                "set_plan",
+                {
+                    "placements": [
+                        {"dx": 0, "dy": 0, "dz": 0, "block_id": "minecraft:oak_planks", "block_state": {}},
+                    ]
+                },
+            ),
+            _tool_use_response(
+                "fill_region",
+                {
+                    "from_corner": {"x": 8, "y": 63, "z": 18},
+                    "to_corner": {"x": 12, "y": 63, "z": 22},
+                    "block_id": "minecraft:oak_planks",
+                },
+            ),
+            _text_response("Placed a 5x5 platform."),
+        ]
+    )
+    ws = FakeWebSocketManager()
+    orchestrator = ChatOrchestrator(
+        anthropic_api_key="test-key",
+        websocket_manager=ws,
+        anthropic_client_factory=lambda api_key: anthropic_client,
+    )
+
+    await orchestrator._run_chat(
+        chat_id="chat-direct-build-tool-guard",
+        client_id="client-direct-build-tool-guard",
+        user_message="build a 5x5 oak platform right below me",
+    )
+
+    assert ws.tool_requests == [
+        ("client-direct-build-tool-guard", "player_position", {}),
+        (
+            "client-direct-build-tool-guard",
+            "fill_region",
+            {
+                "from_corner": {"x": 8, "y": 63, "z": 18},
+                "to_corner": {"x": 12, "y": 63, "z": 22},
+                "block_id": "minecraft:oak_planks",
+            },
+        ),
+    ]
+    second_call = anthropic_client.messages.calls[1]
+    tool_result = second_call["messages"][-1]["content"][0]
+    assert tool_result["is_error"] is True
+    assert "preview-only" in tool_result["content"]
+    chat_responses = _messages_of_type(ws, "chat.response")
+    assert chat_responses[0]["payload"]["message"] == "Placed a 5x5 platform."
+
+
+@pytest.mark.asyncio
+async def test_streaming_fallback_handles_wrapped_async_generator_stream() -> None:
+    anthropic_client = FakeAnthropicClient(
+        responses=[_text_response("Wrapped stream response.")],
+        wrapped_stream=True,
+    )
+    ws = FakeWebSocketManager()
+    orchestrator = ChatOrchestrator(
+        anthropic_api_key="test-key",
+        websocket_manager=ws,
+        anthropic_client_factory=lambda api_key: anthropic_client,
+    )
+
+    await orchestrator._run_chat(chat_id="chat-stream-wrapped", client_id="client-stream-wrapped", user_message="hi")
+
+    deltas = _messages_of_type(ws, "chat.delta")
+    assert len(deltas) >= 2
+    assert deltas[-1]["payload"]["partial"] == "Wrapped stream response."
+    chat_responses = _messages_of_type(ws, "chat.response")
+    assert chat_responses[0]["payload"]["message"] == "Wrapped stream response."
+
+
+@pytest.mark.asyncio
+async def test_wrapped_stream_fallback_reconstructs_tool_use_blocks() -> None:
+    anthropic_client = FakeAnthropicClient(
+        responses=[
+            _tool_use_response(
+                "place_blocks",
+                {
+                    "placements": [
+                        {"x": 10, "y": 64, "z": 20, "block_id": "minecraft:stone"},
+                    ]
+                },
+            ),
+            _text_response("Placed one block."),
+        ],
+        wrapped_stream=True,
+    )
+    ws = FakeWebSocketManager()
+    orchestrator = ChatOrchestrator(
+        anthropic_api_key="test-key",
+        websocket_manager=ws,
+        anthropic_client_factory=lambda api_key: anthropic_client,
+    )
+
+    await orchestrator._run_chat(chat_id="chat-wrapped-tool", client_id="client-wrapped-tool", user_message="build")
+
+    assert ws.tool_requests == [
+        ("client-wrapped-tool", "player_position", {}),
+        (
+            "client-wrapped-tool",
+            "place_blocks",
+            {"placements": [{"x": 10, "y": 64, "z": 20, "block_id": "minecraft:stone"}]},
+        ),
+    ]
+    chat_responses = _messages_of_type(ws, "chat.response")
+    assert chat_responses[0]["payload"]["message"] == "Placed one block."
 
 
 def test_tool_status_message_formats_expected_strings() -> None:
@@ -800,7 +1022,56 @@ async def test_submit_chat_mode_plan_propagates_to_system_prompt() -> None:
 
     assert accepted.status == "accepted"
     first_call = anthropic_client.messages.calls[0]
+    assert first_call["tool_choice"] == {"type": "any"}
     assert "Request mode for this turn: PLAN." in first_call["system"][0]["text"]
+    assert "build_anchor_x=10, build_anchor_y=64, build_anchor_z=30" in first_call["system"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_plan_fast_forces_single_set_plan_tool_round() -> None:
+    anthropic_client = FakeAnthropicClient(
+        responses=[
+            _tool_use_response(
+                "set_plan",
+                {
+                    "placements": [
+                        {"dx": 0, "dy": 0, "dz": 0, "block_id": "minecraft:oak_planks"},
+                    ]
+                },
+            )
+        ]
+    )
+    ws = FakeWebSocketManager()
+    orchestrator = ChatOrchestrator(
+        anthropic_api_key="test-key",
+        websocket_manager=ws,
+        anthropic_client_factory=lambda api_key: anthropic_client,
+    )
+
+    await orchestrator._run_chat(
+        chat_id="chat-plan-fast",
+        client_id="client-plan-fast",
+        user_message="plan a market stall",
+        request_mode="plan_fast",
+    )
+
+    assert ws.tool_requests == [
+        ("client-plan-fast", "player_position", {}),
+        (
+            "client-plan-fast",
+            "set_plan",
+            {
+                "placements": [
+                    {"dx": 0, "dy": 0, "dz": 0, "block_id": "minecraft:oak_planks", "block_state": {}},
+                ]
+            },
+        ),
+    ]
+    first_call = anthropic_client.messages.calls[0]
+    assert first_call["tool_choice"] == {"type": "tool", "name": "set_plan"}
+    assert {tool["name"] for tool in first_call["tools"]} == {"set_plan"}
+    chat_responses = _messages_of_type(ws, "chat.response")
+    assert chat_responses[0]["payload"]["message"] == "Preview loaded. Reposition if needed, then confirm to place."
 
 
 @pytest.mark.asyncio

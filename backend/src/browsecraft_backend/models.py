@@ -77,7 +77,7 @@ class BuildPlan(BaseModel):
 class ChatRequest(BaseModel):
     client_id: str = Field(min_length=1)
     message: str = Field(min_length=1)
-    mode: Literal["build", "plan"] = "build"
+    mode: Literal["build", "plan", "plan_fast"] = "build"
     world_id: str | None = Field(default=None, min_length=1)
     session_id: str | None = Field(default=None, min_length=1)
 

@@ -59,7 +59,6 @@ def _build_demo_pipelines(
         browser_use_api_key=settings.browser_use_api_key,
         browser_use_llm=settings.browser_use_llm,
         browser_use_skill_id=settings.browser_use_planet_minecraft_skill_id,
-        tripo_api_key=settings.tripo_api_key,
         chat_submitter=chat_orchestrator.submit_chat,
     )
 

@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     browser_use_api_key: str | None = None
     browser_use_llm: str = "browser-use-llm"
     browser_use_planet_minecraft_skill_id: str | None = None
-    tripo_api_key: str | None = None
 
 
 @lru_cache

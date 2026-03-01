@@ -17,7 +17,7 @@ def initialize_laminar(api_key: str | None) -> bool:
 
     Laminar.initialize(
         project_api_key=api_key,
-        instruments={
+        disabled_instruments={
             Instruments.ANTHROPIC,
         },
     )

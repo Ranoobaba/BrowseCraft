@@ -90,8 +90,6 @@ public final class ChatPanelScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context, mouseX, mouseY, delta);
-
         int left = panelLeft();
         int right = panelRight();
         int top = panelTop();
@@ -123,10 +121,7 @@ public final class ChatPanelScreen extends Screen {
             context.drawText(this.textRenderer, line.text(), textX, y, line.color(), false);
             y += lineHeight;
         }
-
-        if (this.inputField != null) {
-            this.inputField.render(context, mouseX, mouseY, delta);
-        }
+        super.render(context, mouseX, mouseY, delta);
     }
 
     private void submitInput() {

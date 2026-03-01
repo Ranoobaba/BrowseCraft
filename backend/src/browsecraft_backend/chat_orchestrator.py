@@ -4,8 +4,9 @@ import asyncio
 import json
 import logging
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Annotated, Any, Callable, Literal, Protocol
 from uuid import uuid4
 
@@ -35,10 +36,12 @@ _SYSTEM_PROMPT = (
     "Minecraft coordinates: +x=east, -x=west, +y=up, -y=down, +z=south, -z=north.\n"
     "The live player_position is already injected in the system prompt. "
     "Do not call player_position unless you suspect the player moved during this request.\n"
-    "Always anchor spatial reasoning to the live player_position for this request. "
+    "Use the injected build_anchor as the default center for new structures (10 blocks in front of player facing). "
+    "For follow-up edits to an existing build (replace/add/extend/modify), inspect and anchor to that structure's "
+    "actual coordinates rather than re-centering on the player's latest position.\n"
     "Do not assume default world heights like y=64.\n"
-    "Treat block_x/block_y/block_z from player_position as the authoritative local origin unless the user gives "
-    "explicit absolute coordinates.\n"
+    "Treat block_x/block_y/block_z from player_position as context only when no existing target structure "
+    "has been identified and the user did not provide explicit absolute coordinates.\n"
     "Do not create floating structures unless explicitly requested. Ensure builds are grounded or attached.\n"
     "Before modifying existing structures, inspect first. Use inspect_area with detailed=true when position-level data is needed.\n"
     "When using detailed inspections, keep filter_terrain=true unless terrain layout is directly relevant.\n"
@@ -60,6 +63,7 @@ _MAX_TOOL_ROUNDS = 20
 _CONTEXT_MESSAGE_LIMIT = 12
 _MAX_MODEL_OUTPUT_TOKENS = 768
 _MAX_Y_DELTA_FROM_PLAYER = 96
+_DEFAULT_FORWARD_BUILD_OFFSET = 10
 _CACHE_CONTROL_EPHEMERAL: dict[str, str] = {"type": "ephemeral"}
 _TOOL_RESULT_SUMMARY_PREFIX = "[summarized tool_result]"
 _MEMORY_OUTCOME_TOOLS = {
@@ -206,6 +210,13 @@ class _PlayerPositionResult(BaseModel):
 
 
 @dataclass(slots=True, frozen=True)
+class _BuildAnchor:
+    x: int
+    y: int
+    z: int
+
+
+@dataclass(slots=True, frozen=True)
 class _SessionKey:
     client_id: str
     world_id: str
@@ -223,6 +234,16 @@ class _SessionState:
 class _ToolExecutionResult:
     content: str
     is_error: bool
+
+
+@dataclass(slots=True)
+class _StreamContentBlock:
+    block_type: Literal["text", "tool_use"]
+    text: str = ""
+    tool_id: str | None = None
+    tool_name: str | None = None
+    tool_input: dict[str, Any] | None = None
+    tool_input_chunks: list[str] = field(default_factory=list)
 
 
 class _SessionMessageModel(BaseModel):
@@ -336,6 +357,12 @@ _CACHEABLE_TOOL_SCHEMAS: list[dict[str, Any]] = [
     *[dict(schema) for schema in _TOOL_SCHEMAS[:-1]],
     {**_TOOL_SCHEMAS[-1], "cache_control": _CACHE_CONTROL_EPHEMERAL},
 ]
+_PLAN_DISALLOWED_TOOL_NAMES = {
+    "place_blocks",
+    "fill_region",
+    "undo_last",
+}
+_PLAN_FAST_ALLOWED_TOOL_NAMES = {"set_plan"}
 
 
 class ChatOrchestrator:
@@ -416,8 +443,10 @@ class ChatOrchestrator:
                                 "- x=0.000, y=64.000, z=0.000\n"
                                 "- block_x=0, block_y=64, block_z=0\n"
                                 "- facing=south, dimension=minecraft:overworld\n"
-                                "All placement coordinates in this request must be derived from this live position "
-                                "unless the user explicitly provided absolute coordinates."
+                                "Default build anchor for NEW structures in this request (10 blocks ahead of player facing):\n"
+                                "- build_anchor_x=0, build_anchor_y=64, build_anchor_z=10\n"
+                                "For new structures, center around this build anchor. "
+                                "Only ignore this when the user gives explicit coordinates or requests edits to an existing structure."
                             ),
                             "cache_control": _CACHE_CONTROL_EPHEMERAL,
                         }
@@ -484,7 +513,7 @@ class ChatOrchestrator:
         chat_id: str,
         client_id: str,
         user_message: str,
-        request_mode: Literal["build", "plan"] = "build",
+        request_mode: Literal["build", "plan", "plan_fast"] = "build",
         *,
         world_id: str | None = None,
         session_id: str | None = None,
@@ -533,7 +562,7 @@ class ChatOrchestrator:
         world_id: str,
         session_id: str,
         user_message: str,
-        request_mode: Literal["build", "plan"],
+        request_mode: Literal["build", "plan", "plan_fast"],
     ) -> str:
         if not self._anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is required for chat orchestrator")
@@ -547,6 +576,10 @@ class ChatOrchestrator:
             user_message=user_message,
         )
         player_position = await self._require_player_position(client_id=client_id)
+        build_anchor = _forward_build_anchor(
+            player_position=player_position,
+            distance=_DEFAULT_FORWARD_BUILD_OFFSET,
+        )
         system_prompt = (
             f"{_SYSTEM_PROMPT}\n"
             f"Request mode for this turn: {request_mode.upper()}.\n"
@@ -554,8 +587,10 @@ class ChatOrchestrator:
             f"- x={player_position.x:.3f}, y={player_position.y:.3f}, z={player_position.z:.3f}\n"
             f"- block_x={player_position.block_x}, block_y={player_position.block_y}, block_z={player_position.block_z}\n"
             f"- facing={player_position.facing}, dimension={player_position.dimension}\n"
-            "All placement coordinates in this request must be derived from this live position unless the user "
-            "explicitly provided absolute coordinates."
+            "Default build anchor for NEW structures in this request (10 blocks ahead of player facing):\n"
+            f"- build_anchor_x={build_anchor.x}, build_anchor_y={build_anchor.y}, build_anchor_z={build_anchor.z}\n"
+            "For new structures, center around this build anchor. "
+            "Only ignore this when the user gives explicit coordinates or requests edits to an existing structure."
         )
         if memory_context:
             system_prompt = (
@@ -565,10 +600,22 @@ class ChatOrchestrator:
             )
 
         client = self._anthropic_client_factory(self._anthropic_api_key)
+        force_tool_use = _is_preview_mode(request_mode) or (request_mode == "build" and _has_build_intent(user_message))
+        mode_tool_schemas = _tool_schemas_for_mode(request_mode)
         try:
             tool_rounds = 0
+            no_tool_retries = 0
+            applied_build_modification = False
+            if request_mode == "plan":
+                await self._emit_tool_status(client_id=client_id, status="🧠 Drafting preview plan...")
+            elif request_mode == "plan_fast":
+                await self._emit_tool_status(client_id=client_id, status="🎨 Designing structure preview...")
             while True:
                 _summarize_historical_tool_results(messages)
+                tool_choice = _tool_choice_for_round(
+                    request_mode=request_mode,
+                    force_tool_use=force_tool_use,
+                )
                 response = await self._run_model_round(
                     client=client,
                     model=self._chat_model,
@@ -576,14 +623,36 @@ class ChatOrchestrator:
                     chat_id=chat_id,
                     system_prompt=system_prompt,
                     messages=messages,
+                    tool_schemas=mode_tool_schemas,
+                    tool_choice=tool_choice,
                 )
                 assistant_blocks = _normalize_assistant_blocks(response.content)
                 messages.append({"role": "assistant", "content": assistant_blocks})
 
                 tool_uses = [block for block in assistant_blocks if block["type"] == "tool_use"]
                 if not tool_uses:
-                    return _extract_text_response(assistant_blocks)
+                    assistant_text = _extract_text_response(assistant_blocks)
+                    if (
+                        request_mode == "build"
+                        and _has_build_intent(user_message)
+                        and tool_rounds == 0
+                        and not applied_build_modification
+                        and no_tool_retries < 2
+                    ):
+                        no_tool_retries += 1
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "You must execute this build by calling place_blocks or fill_region. "
+                                    "Do not claim completion without successful placement tool calls."
+                                ),
+                            }
+                        )
+                        continue
+                    return assistant_text
 
+                force_tool_use = False
                 tool_rounds += 1
                 if tool_rounds > _MAX_TOOL_ROUNDS:
                     raise RuntimeError(f"Exceeded max tool rounds ({_MAX_TOOL_ROUNDS})")
@@ -602,11 +671,17 @@ class ChatOrchestrator:
                             raw_input=tool_use["input"],
                             player_position=player_position,
                             cached_player_position=player_position,
+                            request_mode=request_mode,
                         )
                         for tool_use in tool_uses
                     ]
                 )
+                set_plan_succeeded = False
                 for tool_use, execution in zip(tool_uses, executions, strict=True):
+                    if tool_use["name"] in {"place_blocks", "fill_region"} and not execution.is_error:
+                        applied_build_modification = True
+                    if tool_use["name"] == "set_plan" and not execution.is_error:
+                        set_plan_succeeded = True
                     tool_result = {
                         "type": "tool_result",
                         "tool_use_id": tool_use["id"],
@@ -617,6 +692,8 @@ class ChatOrchestrator:
                     tool_results.append(tool_result)
 
                 messages.append({"role": "user", "content": tool_results})
+                if _is_preview_mode(request_mode) and set_plan_succeeded:
+                    return "Preview loaded. Reposition if needed, then confirm to place."
         finally:
             await client.close()
 
@@ -629,23 +706,31 @@ class ChatOrchestrator:
         chat_id: str,
         system_prompt: str,
         messages: list[dict[str, Any]],
+        tool_schemas: list[dict[str, Any]],
+        tool_choice: dict[str, Any] | None,
     ) -> Any:
-        async with client.messages.stream(
-            model=model,
-            max_tokens=_MAX_MODEL_OUTPUT_TOKENS,
-            temperature=0,
-            system=[
+        stream_kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": _MAX_MODEL_OUTPUT_TOKENS,
+            "temperature": 0,
+            "system": [
                 {
                     "type": "text",
                     "text": system_prompt,
                     "cache_control": _CACHE_CONTROL_EPHEMERAL,
                 }
             ],
-            tools=_CACHEABLE_TOOL_SCHEMAS,
-            messages=messages,
-        ) as stream:
+            "tools": tool_schemas,
+            "messages": messages,
+        }
+        if tool_choice is not None:
+            stream_kwargs["tool_choice"] = tool_choice
+
+        async with client.messages.stream(**stream_kwargs) as stream:
             partial = ""
+            fallback_blocks: dict[int, _StreamContentBlock] = {}
             async for event in stream:
+                _accumulate_stream_event(fallback_blocks, event)
                 if event.type != "content_block_delta" or event.delta.type != "text_delta":
                     continue
                 delta = event.delta.text
@@ -661,7 +746,13 @@ class ChatOrchestrator:
                         },
                     },
                 )
-            return await stream.get_final_message()
+            get_final_message = getattr(stream, "get_final_message", None)
+            if callable(get_final_message):
+                return await get_final_message()
+
+            # Laminar's Anthropic instrumentation currently unwraps the stream
+            # into an async generator that drops helper methods.
+            return _response_from_stream_events(fallback_blocks)
 
     async def _emit_tool_status(self, *, client_id: str, status: str) -> None:
         try:
@@ -684,7 +775,17 @@ class ChatOrchestrator:
         raw_input: Any,
         player_position: _PlayerPositionResult,
         cached_player_position: _PlayerPositionResult,
+        request_mode: Literal["build", "plan", "plan_fast"],
     ) -> _ToolExecutionResult:
+        if request_mode == "build" and tool_name in {"set_plan", "get_active_overlay", "modify_overlay"}:
+            return _ToolExecutionResult(
+                content=(
+                    f"{tool_name} is preview-only. For this direct build request, "
+                    "use place_blocks or fill_region to modify the world immediately."
+                ),
+                is_error=True,
+            )
+
         try:
             params = _validate_tool_args(tool_name, raw_input)
             _validate_placement_against_player_position(
@@ -926,6 +1027,80 @@ def _format_tool_memory_content(tool_name: str, params: dict[str, Any], result: 
     return f"tool={tool_name}; input={params_payload}; output={result_payload}"
 
 
+def _accumulate_stream_event(blocks: dict[int, _StreamContentBlock], event: Any) -> None:
+    event_type = getattr(event, "type", None)
+    if event_type == "content_block_start":
+        index = getattr(event, "index", None)
+        content_block = getattr(event, "content_block", None)
+        block_type = getattr(content_block, "type", None)
+        if not isinstance(index, int) or block_type not in {"text", "tool_use"}:
+            return
+        if block_type == "text":
+            blocks[index] = _StreamContentBlock(
+                block_type="text",
+                text=getattr(content_block, "text", "") or "",
+            )
+            return
+        tool_input = getattr(content_block, "input", None)
+        blocks[index] = _StreamContentBlock(
+            block_type="tool_use",
+            tool_id=getattr(content_block, "id", None),
+            tool_name=getattr(content_block, "name", None),
+            tool_input=tool_input if isinstance(tool_input, dict) else None,
+        )
+        return
+
+    if event_type != "content_block_delta":
+        return
+
+    index = getattr(event, "index", None)
+    delta = getattr(event, "delta", None)
+    delta_type = getattr(delta, "type", None)
+    if not isinstance(index, int):
+        return
+
+    if delta_type == "text_delta":
+        block = blocks.setdefault(index, _StreamContentBlock(block_type="text"))
+        block.text += getattr(delta, "text", "") or ""
+        return
+
+    if delta_type == "input_json_delta":
+        block = blocks.setdefault(index, _StreamContentBlock(block_type="tool_use"))
+        block.tool_input_chunks.append(getattr(delta, "partial_json", "") or "")
+
+
+def _response_from_stream_events(blocks: dict[int, _StreamContentBlock]) -> Any:
+    content: list[Any] = []
+    for index in sorted(blocks):
+        block = blocks[index]
+        if block.block_type == "text":
+            content.append(SimpleNamespace(type="text", text=block.text))
+            continue
+
+        if block.tool_id is None or block.tool_name is None:
+            raise RuntimeError("Anthropic tool_use block missing id or name in streaming fallback")
+
+        if block.tool_input_chunks:
+            raw_input = "".join(block.tool_input_chunks).strip()
+            parsed_input = json.loads(raw_input) if raw_input else {}
+        else:
+            parsed_input = block.tool_input if block.tool_input is not None else {}
+
+        if not isinstance(parsed_input, dict):
+            raise RuntimeError("Anthropic tool_use block input must be an object")
+
+        content.append(
+            SimpleNamespace(
+                type="tool_use",
+                id=block.tool_id,
+                name=block.tool_name,
+                input=parsed_input,
+            )
+        )
+
+    return SimpleNamespace(content=content)
+
+
 def _normalize_assistant_blocks(content_blocks: list[Any]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for block in content_blocks:
@@ -968,6 +1143,78 @@ def _extract_text_response(assistant_blocks: list[dict[str, Any]]) -> str:
     if not full_text:
         raise RuntimeError("Anthropic response did not include assistant text")
     return full_text
+
+
+def _has_build_intent(message: str) -> bool:
+    lowered = message.lower()
+    markers = (
+        "build ",
+        "make ",
+        "create ",
+        "construct ",
+        "place ",
+        "add ",
+        "replace ",
+        "remove ",
+        "fill ",
+        "put ",
+    )
+    return any(marker in lowered for marker in markers)
+
+
+def _is_preview_mode(request_mode: Literal["build", "plan", "plan_fast"]) -> bool:
+    return request_mode in {"plan", "plan_fast"}
+
+
+def _tool_choice_for_round(
+    *,
+    request_mode: Literal["build", "plan", "plan_fast"],
+    force_tool_use: bool,
+) -> dict[str, Any] | None:
+    if request_mode == "plan_fast":
+        return {"type": "tool", "name": "set_plan"}
+    if force_tool_use:
+        return {"type": "any"}
+    return None
+
+
+def _tool_schemas_for_mode(request_mode: Literal["build", "plan", "plan_fast"]) -> list[dict[str, Any]]:
+    if request_mode == "plan":
+        return [
+            schema
+            for schema in _CACHEABLE_TOOL_SCHEMAS
+            if schema["name"] not in _PLAN_DISALLOWED_TOOL_NAMES
+        ]
+    if request_mode == "plan_fast":
+        return [
+            schema
+            for schema in _CACHEABLE_TOOL_SCHEMAS
+            if schema["name"] in _PLAN_FAST_ALLOWED_TOOL_NAMES
+        ]
+    return _CACHEABLE_TOOL_SCHEMAS
+
+
+def _forward_build_anchor(
+    *,
+    player_position: _PlayerPositionResult,
+    distance: int,
+) -> _BuildAnchor:
+    facing = player_position.facing.lower()
+    dx, dz = 0, 0
+    if facing == "north":
+        dz = -distance
+    elif facing == "south":
+        dz = distance
+    elif facing == "east":
+        dx = distance
+    elif facing == "west":
+        dx = -distance
+
+    return _BuildAnchor(
+        x=player_position.block_x + dx,
+        y=player_position.block_y,
+        z=player_position.block_z + dz,
+    )
 
 
 def _validate_tool_args(tool_name: str, raw_input: Any) -> dict[str, Any]:
