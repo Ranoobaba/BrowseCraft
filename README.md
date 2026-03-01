@@ -9,7 +9,7 @@ flowchart LR
   A["Minecraft + Fabric Mod"] -->|"/build, /imagine, /chat, /session"| B["FastAPI Backend"]
   B -->|search/download + parse schematics| C["GitHub/Modrinth/CurseForge + Browser-Use"]
   B -->|image generation| D["Gemini image model"]
-  B -->|vision + reasoning + tool use| E["Claude Sonnet 4 (Opus escalation for complex chats)"]
+  B -->|vision + reasoning + tool use| E["Claude Sonnet 4"]
   B <-->|tool.request / tool.response| A
   B -->|sessions + blueprints persistence| F["Convex (optional)"]
   B -->|long-term memory retrieval/store| G["Supermemory (optional)"]

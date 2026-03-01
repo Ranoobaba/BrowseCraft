@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     anthropic_api_key: str | None = None
     anthropic_chat_model: str = "claude-sonnet-4-20250514"
-    anthropic_chat_escalation_model: str = "claude-opus-4-1-20250805"
     anthropic_vision_model: str = "claude-sonnet-4-20250514"
     supermemory_api_key: str | None = None
 

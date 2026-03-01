@@ -30,7 +30,6 @@ from .websocket_manager import WebSocketManager
 logger = logging.getLogger(__name__)
 
 CHAT_MODEL = "claude-sonnet-4-20250514"
-CHAT_ESCALATION_MODEL = "claude-opus-4-1-20250805"
 DEFAULT_MC_VERSION = "1.21.11"
 _DEFAULT_WORLD_ID = "default"
 _SYSTEM_PROMPT = (
@@ -48,17 +47,6 @@ _MEMORY_OUTCOME_TOOLS = {
     "save_blueprint",
     "load_blueprint",
 }
-_OPUS_ESCALATION_HINTS = (
-    "castle",
-    "blueprint",
-    "terrain",
-    "cliff",
-    "symmetry",
-    "multi-floor",
-    "redstone",
-    "optimize",
-    "layout",
-)
 
 
 class _ToolArgs(BaseModel):
@@ -247,14 +235,12 @@ class ChatOrchestrator:
         job_manager: JobManager,
         websocket_manager: WebSocketManager,
         chat_model: str = CHAT_MODEL,
-        escalation_model: str = CHAT_ESCALATION_MODEL,
         anthropic_client_factory: AnthropicClientFactory | None = None,
         convex_client: ConvexHttpClient | None = None,
         supermemory_client: SupermemoryClientProtocol | None = None,
     ) -> None:
         self._anthropic_api_key = anthropic_api_key
         self._chat_model = chat_model
-        self._escalation_model = escalation_model
         self._job_manager = job_manager
         self._websocket_manager = websocket_manager
         self._anthropic_client_factory = anthropic_client_factory or (lambda api_key: AsyncAnthropic(api_key=api_key))
@@ -415,18 +401,13 @@ class ChatOrchestrator:
                 f"{memory_context}"
             )
 
-        selected_model = _select_chat_model(
-            user_message=user_message,
-            default_model=self._chat_model,
-            escalation_model=self._escalation_model,
-        )
         client = self._anthropic_client_factory(self._anthropic_api_key)
         try:
             tool_rounds = 0
             while True:
                 response = await self._run_model_round(
                     client=client,
-                    model=selected_model,
+                    model=self._chat_model,
                     client_id=client_id,
                     chat_id=chat_id,
                     system_prompt=system_prompt,
@@ -749,14 +730,6 @@ def _format_profile_context(profile: SupermemoryProfileContext) -> str:
         lines.append("Profile dynamic:")
         lines.extend(f"- {item}" for item in profile.dynamic)
     return "\n".join(lines)
-
-
-def _select_chat_model(user_message: str, default_model: str, escalation_model: str) -> str:
-    lowered = user_message.lower()
-    score = sum(1 for hint in _OPUS_ESCALATION_HINTS if hint in lowered)
-    if score >= 2:
-        return escalation_model
-    return default_model
 
 
 def _format_tool_memory_content(tool_name: str, params: dict[str, Any], result: dict[str, Any]) -> str:

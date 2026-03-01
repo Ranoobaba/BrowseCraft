@@ -102,7 +102,6 @@ def _build_chat_orchestrator(
         job_manager=jobs,
         websocket_manager=ws_manager,
         chat_model=settings.anthropic_chat_model,
-        escalation_model=settings.anthropic_chat_escalation_model,
     )
 
 
