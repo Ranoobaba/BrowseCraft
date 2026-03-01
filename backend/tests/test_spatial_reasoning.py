@@ -25,12 +25,19 @@ def _dispatch_tool(world: HeadlessVoxelWorld, tool: str, params: dict[str, Any])
             center=params["center"],
             radius=int(params["radius"]),
             detailed=bool(params.get("detailed", False)),
+            filter_terrain=bool(params.get("filter_terrain", True)),
         )
     if tool == "place_blocks":
         placements = params["placements"]
         if not isinstance(placements, list):
             raise RuntimeError("place_blocks expects placements list")
         return world.place_blocks(placements)
+    if tool == "fill_region":
+        return world.fill_region(
+            from_corner=params["from_corner"],
+            to_corner=params["to_corner"],
+            block_id=str(params["block_id"]),
+        )
     if tool == "undo_last":
         return world.undo_last()
     if tool == "get_active_overlay":

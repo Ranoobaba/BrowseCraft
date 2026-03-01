@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Callable, Literal, Protocol
@@ -36,19 +37,23 @@ _SYSTEM_PROMPT = (
     "Ground-level builds should typically start around y=64 or y=65 unless user says otherwise.\n"
     "Do not create floating structures unless explicitly requested. Ensure builds are grounded or attached.\n"
     "Before modifying existing structures, inspect first. Use inspect_area with detailed=true when position-level data is needed.\n"
+    "When using detailed inspections, keep filter_terrain=true unless terrain layout is directly relevant.\n"
     "When inspecting, start with small radii (4-6). Expand radius only when strictly necessary.\n"
     "If a request references walls/faces, map orientation using coordinates: south face = max z, north face = min z, "
     "east face = max x, west face = min x.\n"
-    "For large builds, split work into multiple place_blocks calls instead of one huge placement list.\n"
+    "For axis-aligned cuboids (walls, floors, roofs, boxes), prefer fill_region over enumerating many blocks.\n"
+    "For large custom builds, split work into multiple place_blocks calls instead of one huge placement list.\n"
     "If a placement batch is clearly wrong, call undo_last and retry with corrected coordinates.\n"
     "Use tools for factual game state instead of guessing."
 )
 _MAX_TOOL_ROUNDS = 20
 _CONTEXT_MESSAGE_LIMIT = 12
 _MAX_MODEL_OUTPUT_TOKENS = 768
-_PROMPT_CACHE_CONTROL: dict[str, str] = {"type": "ephemeral", "ttl": "1h"}
+_CACHE_CONTROL_EPHEMERAL: dict[str, str] = {"type": "ephemeral"}
+_TOOL_RESULT_SUMMARY_PREFIX = "[summarized tool_result]"
 _MEMORY_OUTCOME_TOOLS = {
     "place_blocks",
+    "fill_region",
     "undo_last",
     "modify_overlay",
     "save_blueprint",
@@ -81,6 +86,7 @@ class _InspectAreaArgs(_ToolArgs):
     center: _BlockPositionArgs
     radius: int = Field(ge=0, le=12)
     detailed: bool = False
+    filter_terrain: bool = True
 
     @model_validator(mode="after")
     def validate_detailed_radius(self) -> _InspectAreaArgs:
@@ -91,6 +97,22 @@ class _InspectAreaArgs(_ToolArgs):
 
 class _PlaceBlocksArgs(_ToolArgs):
     placements: list[_PlaceBlockArgs] = Field(min_length=1)
+
+
+class _FillRegionArgs(_ToolArgs):
+    from_corner: _BlockPositionArgs
+    to_corner: _BlockPositionArgs
+    block_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_volume(self) -> _FillRegionArgs:
+        width = abs(self.to_corner.x - self.from_corner.x) + 1
+        height = abs(self.to_corner.y - self.from_corner.y) + 1
+        depth = abs(self.to_corner.z - self.from_corner.z) + 1
+        volume = width * height * depth
+        if volume > 4096:
+            raise ValueError("fill_region volume must be <= 4096 blocks")
+        return self
 
 
 class _ModifyOverlayRotateArgs(_ToolArgs):
@@ -224,7 +246,8 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "inspect_area",
         "description": (
             "Inspect blocks around a center position with a radius. "
-            "Set detailed=true to include non-air block coordinates."
+            "Set detailed=true to include non-air block coordinates. "
+            "Set filter_terrain=true to suppress common terrain blocks."
         ),
         "input_schema": _InspectAreaArgs.model_json_schema(),
     },
@@ -232,6 +255,11 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
         "name": "place_blocks",
         "description": "Place blocks at absolute world coordinates.",
         "input_schema": _PlaceBlocksArgs.model_json_schema(),
+    },
+    {
+        "name": "fill_region",
+        "description": "Fill an axis-aligned cuboid region with one block type.",
+        "input_schema": _FillRegionArgs.model_json_schema(),
     },
     {
         "name": "undo_last",
@@ -263,6 +291,10 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
         "description": "Load a named blueprint into the active overlay.",
         "input_schema": _BlueprintNameArgs.model_json_schema(),
     },
+]
+_CACHEABLE_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    *[dict(schema) for schema in _TOOL_SCHEMAS[:-1]],
+    {**_TOOL_SCHEMAS[-1], "cache_control": _CACHE_CONTROL_EPHEMERAL},
 ]
 
 
@@ -441,6 +473,7 @@ class ChatOrchestrator:
         try:
             tool_rounds = 0
             while True:
+                _summarize_historical_tool_results(messages)
                 response = await self._run_model_round(
                     client=client,
                     model=self._chat_model,
@@ -496,9 +529,14 @@ class ChatOrchestrator:
             model=model,
             max_tokens=_MAX_MODEL_OUTPUT_TOKENS,
             temperature=0,
-            cache_control=_PROMPT_CACHE_CONTROL,
-            system=system_prompt,
-            tools=_TOOL_SCHEMAS,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": _CACHE_CONTROL_EPHEMERAL,
+                }
+            ],
+            tools=_CACHEABLE_TOOL_SCHEMAS,
             messages=messages,
         )
 
@@ -793,6 +831,9 @@ def _validate_tool_args(tool_name: str, raw_input: Any) -> dict[str, Any]:
     if tool_name == "place_blocks":
         parsed = _PlaceBlocksArgs.model_validate(raw_input)
         return parsed.model_dump(mode="json")
+    if tool_name == "fill_region":
+        parsed = _FillRegionArgs.model_validate(raw_input)
+        return parsed.model_dump(mode="json")
     if tool_name == "modify_overlay":
         parsed = _MODIFY_OVERLAY_ADAPTER.validate_python(raw_input)
         return parsed.model_dump(mode="json", by_alias=True)
@@ -800,3 +841,126 @@ def _validate_tool_args(tool_name: str, raw_input: Any) -> dict[str, Any]:
         parsed = _BlueprintNameArgs.model_validate(raw_input)
         return parsed.model_dump(mode="json")
     raise ValueError(f"Unsupported tool: {tool_name}")
+
+
+def _summarize_historical_tool_results(messages: list[dict[str, Any]]) -> None:
+    tool_result_indexes: list[int] = []
+    for index, message in enumerate(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        if any(isinstance(block, dict) and block.get("type") == "tool_result" for block in content):
+            tool_result_indexes.append(index)
+
+    if len(tool_result_indexes) <= 1:
+        return
+
+    for index in tool_result_indexes[:-1]:
+        content = messages[index]["content"]
+        if not isinstance(content, list):
+            continue
+
+        updated_blocks: list[dict[str, Any]] = []
+        changed = False
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                updated_blocks.append(block)
+                continue
+            raw_content = block.get("content")
+            if not isinstance(raw_content, str):
+                updated_blocks.append(block)
+                continue
+            summary = _summarize_tool_result_content(raw_content)
+            if summary != raw_content:
+                changed = True
+            updated_blocks.append({**block, "content": summary})
+
+        if changed:
+            messages[index] = {
+                "role": "user",
+                "content": updated_blocks,
+            }
+
+
+def _summarize_tool_result_content(content: str) -> str:
+    if content.startswith(_TOOL_RESULT_SUMMARY_PREFIX):
+        return content
+
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        if len(content) <= 1200:
+            return content
+        return f"{_TOOL_RESULT_SUMMARY_PREFIX} truncated_text={len(content)} chars"
+
+    if not isinstance(payload, dict):
+        if len(content) <= 1200:
+            return content
+        return f"{_TOOL_RESULT_SUMMARY_PREFIX} non_object_payload={type(payload).__name__}"
+
+    if "non_air_blocks" in payload:
+        return _summarize_inspect_area_result(payload)
+    if "placed_count" in payload and "anchor" in payload:
+        anchor = payload.get("anchor", {})
+        return (
+            f"{_TOOL_RESULT_SUMMARY_PREFIX} place_blocks placed_count={payload.get('placed_count')} "
+            f"anchor={anchor}"
+        )
+    if "placed_count" in payload and payload.get("fill_region"):
+        return (
+            f"{_TOOL_RESULT_SUMMARY_PREFIX} fill_region placed_count={payload.get('placed_count')} "
+            f"from={payload.get('from_corner')} to={payload.get('to_corner')}"
+        )
+    if "undone" in payload or "undone_count" in payload:
+        return f"{_TOOL_RESULT_SUMMARY_PREFIX} undo_last {json.dumps(payload, sort_keys=True)}"
+
+    compact = json.dumps(payload, sort_keys=True)
+    if len(compact) <= 1200:
+        return content
+    keys = ",".join(sorted(payload.keys()))
+    return f"{_TOOL_RESULT_SUMMARY_PREFIX} keys={keys} size={len(compact)} chars"
+
+
+def _summarize_inspect_area_result(payload: dict[str, Any]) -> str:
+    non_air_blocks = payload.get("non_air_blocks")
+    if not isinstance(non_air_blocks, list):
+        return f"{_TOOL_RESULT_SUMMARY_PREFIX} inspect_area no_non_air_blocks"
+
+    count = len(non_air_blocks)
+    if count == 0:
+        return (
+            f"{_TOOL_RESULT_SUMMARY_PREFIX} inspect_area center={payload.get('center')} "
+            f"radius={payload.get('radius')} non_air_blocks=0"
+        )
+
+    block_ids: list[str] = []
+    xs: list[int] = []
+    ys: list[int] = []
+    zs: list[int] = []
+    for block in non_air_blocks:
+        if not isinstance(block, dict):
+            continue
+        block_id = block.get("block_id")
+        x = block.get("x")
+        y = block.get("y")
+        z = block.get("z")
+        if isinstance(block_id, str):
+            block_ids.append(block_id)
+        if isinstance(x, int) and isinstance(y, int) and isinstance(z, int):
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
+
+    top_blocks = Counter(block_ids).most_common(4)
+    bbox = "unknown"
+    if xs and ys and zs:
+        bbox = f"x={min(xs)}..{max(xs)},y={min(ys)}..{max(ys)},z={min(zs)}..{max(zs)}"
+
+    return (
+        f"{_TOOL_RESULT_SUMMARY_PREFIX} inspect_area center={payload.get('center')} "
+        f"radius={payload.get('radius')} detailed={payload.get('detailed')} "
+        f"filter_terrain={payload.get('filter_terrain')} non_air_blocks={count} "
+        f"bbox={bbox} top_blocks={top_blocks}"
+    )

@@ -14,6 +14,20 @@ import websockets
 
 
 Coord = tuple[int, int, int]
+_TERRAIN_BLOCK_IDS = {
+    "minecraft:grass_block",
+    "minecraft:dirt",
+    "minecraft:coarse_dirt",
+    "minecraft:podzol",
+    "minecraft:mycelium",
+    "minecraft:rooted_dirt",
+    "minecraft:bedrock",
+    "minecraft:sand",
+    "minecraft:red_sand",
+    "minecraft:gravel",
+    "minecraft:deepslate",
+    "minecraft:tuff",
+}
 
 
 @dataclass(slots=True, frozen=True)
@@ -54,6 +68,47 @@ class HeadlessVoxelWorld:
         self._undo_stack.append(history)
         return {"placed_count": len(placements)}
 
+    def fill_region(
+        self,
+        *,
+        from_corner: dict[str, Any],
+        to_corner: dict[str, Any],
+        block_id: str,
+    ) -> dict[str, Any]:
+        min_x = min(int(from_corner["x"]), int(to_corner["x"]))
+        max_x = max(int(from_corner["x"]), int(to_corner["x"]))
+        min_y = min(int(from_corner["y"]), int(to_corner["y"]))
+        max_y = max(int(from_corner["y"]), int(to_corner["y"]))
+        min_z = min(int(from_corner["z"]), int(to_corner["z"]))
+        max_z = max(int(from_corner["z"]), int(to_corner["z"]))
+
+        volume = (max_x - min_x + 1) * (max_y - min_y + 1) * (max_z - min_z + 1)
+        if volume > 4096:
+            raise RuntimeError("fill_region volume must be <= 4096 blocks")
+
+        history: list[tuple[Coord, str]] = []
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                for z in range(min_z, max_z + 1):
+                    coord = (x, y, z)
+                    history.append((coord, self.block_at(coord)))
+                    self.set_block(coord, block_id)
+        self._undo_stack.append(history)
+        return {
+            "placed_count": len(history),
+            "fill_region": True,
+            "from_corner": {
+                "x": int(from_corner["x"]),
+                "y": int(from_corner["y"]),
+                "z": int(from_corner["z"]),
+            },
+            "to_corner": {
+                "x": int(to_corner["x"]),
+                "y": int(to_corner["y"]),
+                "z": int(to_corner["z"]),
+            },
+        }
+
     def undo_last(self) -> dict[str, Any]:
         if not self._undo_stack:
             raise RuntimeError("No placement batch to undo")
@@ -62,7 +117,14 @@ class HeadlessVoxelWorld:
             self.set_block(coord, previous_block)
         return {"undone_count": len(history)}
 
-    def inspect_area(self, *, center: dict[str, Any], radius: int, detailed: bool = False) -> dict[str, Any]:
+    def inspect_area(
+        self,
+        *,
+        center: dict[str, Any],
+        radius: int,
+        detailed: bool = False,
+        filter_terrain: bool = True,
+    ) -> dict[str, Any]:
         cx = int(center["x"])
         cy = int(center["y"])
         cz = int(center["z"])
@@ -79,7 +141,11 @@ class HeadlessVoxelWorld:
                     z = cz + dz
                     block_id = self.block_at((x, y, z))
                     counts[block_id] += 1
-                    if detailed and block_id != "minecraft:air":
+                    if (
+                        detailed
+                        and block_id != "minecraft:air"
+                        and not (filter_terrain and _is_terrain_block(block_id, y))
+                    ):
                         non_air_blocks.append(
                             {
                                 "x": x,
@@ -96,6 +162,7 @@ class HeadlessVoxelWorld:
             "center": {"x": cx, "y": cy, "z": cz},
             "block_counts": dict(sorted(counts.items())),
             "detailed": detailed,
+            "filter_terrain": filter_terrain,
         }
         if detailed:
             result["non_air_blocks"] = non_air_blocks
@@ -255,12 +322,19 @@ def _dispatch_tool(world: HeadlessVoxelWorld, tool: str, params: dict[str, Any])
             center=params["center"],
             radius=int(params["radius"]),
             detailed=bool(params.get("detailed", False)),
+            filter_terrain=bool(params.get("filter_terrain", True)),
         )
     if tool == "place_blocks":
         placements = params["placements"]
         if not isinstance(placements, list):
             raise RuntimeError("place_blocks expects placements list")
         return world.place_blocks(placements)
+    if tool == "fill_region":
+        return world.fill_region(
+            from_corner=params["from_corner"],
+            to_corner=params["to_corner"],
+            block_id=str(params["block_id"]),
+        )
     if tool == "undo_last":
         return world.undo_last()
     if tool == "get_active_overlay":
@@ -293,6 +367,12 @@ def _dispatch_tool(world: HeadlessVoxelWorld, tool: str, params: dict[str, Any])
             },
         }
     raise RuntimeError(f"Unsupported tool: {tool}")
+
+
+def _is_terrain_block(block_id: str, y: int) -> bool:
+    if block_id == "minecraft:stone" and y <= 63:
+        return True
+    return block_id in _TERRAIN_BLOCK_IDS
 
 
 def build_parser() -> argparse.ArgumentParser:

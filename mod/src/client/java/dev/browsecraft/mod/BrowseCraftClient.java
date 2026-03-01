@@ -50,6 +50,20 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 
 public final class BrowseCraftClient implements ClientModInitializer {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Set<String> TERRAIN_BLOCK_IDS = Set.of(
+            "minecraft:grass_block",
+            "minecraft:dirt",
+            "minecraft:coarse_dirt",
+            "minecraft:podzol",
+            "minecraft:mycelium",
+            "minecraft:rooted_dirt",
+            "minecraft:bedrock",
+            "minecraft:sand",
+            "minecraft:red_sand",
+            "minecraft:gravel",
+            "minecraft:deepslate",
+            "minecraft:tuff"
+    );
     private static volatile BrowseCraftClient instance;
 
     public static volatile Path latestBuildTestJsonPath;
@@ -573,6 +587,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
             case "player_inventory" -> toolPlayerInventory(client);
             case "inspect_area" -> toolInspectArea(client, params);
             case "place_blocks" -> toolPlaceBlocks(params);
+            case "fill_region" -> toolFillRegion(params);
             case "undo_last" -> toolUndoLast();
             case "get_active_overlay" -> activeOverlaySummary(overlayState.snapshot());
             case "modify_overlay" -> toolModifyOverlay(params);
@@ -647,6 +662,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
         BlockPos center = requiredBlockPos(params, "center");
         int requestedRadius = requiredInt(params, "radius");
         boolean detailed = params.has("detailed") && requiredBoolean(params, "detailed");
+        boolean filterTerrain = !params.has("filter_terrain") || requiredBoolean(params, "filter_terrain");
         int maxRadius = detailed ? 6 : 12;
         int radius = Math.min(maxRadius, Math.max(0, requestedRadius));
         ClientWorld world = client.world;
@@ -660,7 +676,11 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     BlockPos pos = center.add(dx, dy, dz);
                     String blockId = Registries.BLOCK.getId(world.getBlockState(pos).getBlock()).toString();
                     blockCounts.merge(blockId, 1, Integer::sum);
-                    if (detailed && !"minecraft:air".equals(blockId)) {
+                    if (
+                            detailed
+                                    && !"minecraft:air".equals(blockId)
+                                    && !(filterTerrain && isTerrainBlock(blockId, pos.getY()))
+                    ) {
                         JsonObject block = new JsonObject();
                         block.addProperty("x", pos.getX());
                         block.addProperty("y", pos.getY());
@@ -685,6 +705,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
         result.add("center", blockPosToJson(center));
         result.add("block_counts", countsJson);
         result.addProperty("detailed", detailed);
+        result.addProperty("filter_terrain", filterTerrain);
         if (detailed) {
             result.add("non_air_blocks", nonAirBlocks);
         }
@@ -702,9 +723,6 @@ public final class BrowseCraftClient implements ClientModInitializer {
         }
 
         List<AbsolutePlacement> absolutePlacements = new ArrayList<>(placementsJson.size());
-        int anchorX = Integer.MAX_VALUE;
-        int anchorY = Integer.MAX_VALUE;
-        int anchorZ = Integer.MAX_VALUE;
 
         for (JsonElement element : placementsJson) {
             if (!element.isJsonObject()) {
@@ -717,9 +735,56 @@ public final class BrowseCraftClient implements ClientModInitializer {
             String blockId = normalizeBlockId(requiredString(placementJson, "block_id"));
 
             absolutePlacements.add(new AbsolutePlacement(x, y, z, blockId));
-            anchorX = Math.min(anchorX, x);
-            anchorY = Math.min(anchorY, y);
-            anchorZ = Math.min(anchorZ, z);
+        }
+
+        return applyAbsolutePlacements(absolutePlacements);
+    }
+
+    private JsonObject toolFillRegion(JsonObject params) {
+        BlockPos fromCorner = requiredBlockPos(params, "from_corner");
+        BlockPos toCorner = requiredBlockPos(params, "to_corner");
+        String blockId = normalizeBlockId(requiredString(params, "block_id"));
+
+        int minX = Math.min(fromCorner.getX(), toCorner.getX());
+        int maxX = Math.max(fromCorner.getX(), toCorner.getX());
+        int minY = Math.min(fromCorner.getY(), toCorner.getY());
+        int maxY = Math.max(fromCorner.getY(), toCorner.getY());
+        int minZ = Math.min(fromCorner.getZ(), toCorner.getZ());
+        int maxZ = Math.max(fromCorner.getZ(), toCorner.getZ());
+
+        long volume = (long) (maxX - minX + 1) * (long) (maxY - minY + 1) * (long) (maxZ - minZ + 1);
+        if (volume > 4096L) {
+            throw new IllegalArgumentException("fill_region volume must be <= 4096 blocks");
+        }
+
+        List<AbsolutePlacement> absolutePlacements = new ArrayList<>((int) volume);
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    absolutePlacements.add(new AbsolutePlacement(x, y, z, blockId));
+                }
+            }
+        }
+
+        JsonObject result = applyAbsolutePlacements(absolutePlacements);
+        result.addProperty("fill_region", true);
+        result.add("from_corner", blockPosToJson(fromCorner));
+        result.add("to_corner", blockPosToJson(toCorner));
+        return result;
+    }
+
+    private JsonObject applyAbsolutePlacements(List<AbsolutePlacement> absolutePlacements) {
+        if (absolutePlacements.isEmpty()) {
+            throw new IllegalArgumentException("placements must contain at least one block");
+        }
+
+        int anchorX = Integer.MAX_VALUE;
+        int anchorY = Integer.MAX_VALUE;
+        int anchorZ = Integer.MAX_VALUE;
+        for (AbsolutePlacement placement : absolutePlacements) {
+            anchorX = Math.min(anchorX, placement.x());
+            anchorY = Math.min(anchorY, placement.y());
+            anchorZ = Math.min(anchorZ, placement.z());
         }
 
         if (overlayState.hasPlan()) {
@@ -933,6 +998,13 @@ public final class BrowseCraftClient implements ClientModInitializer {
             return blockId;
         }
         return blockId.substring(0, stateStart);
+    }
+
+    private boolean isTerrainBlock(String blockId, int y) {
+        if ("minecraft:stone".equals(blockId) && y <= 63) {
+            return true;
+        }
+        return TERRAIN_BLOCK_IDS.contains(blockId);
     }
 
     public static void onBuildTestCommand() {

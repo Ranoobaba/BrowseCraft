@@ -17,6 +17,7 @@ EXPECTED_TOOL_NAMES = {
     "player_inventory",
     "inspect_area",
     "place_blocks",
+    "fill_region",
     "undo_last",
     "get_active_overlay",
     "modify_overlay",
@@ -58,6 +59,24 @@ class FakeWebSocketManager:
 
     async def send_payload(self, client_id: str, payload: dict[str, Any]) -> None:
         self.sent_payloads.append((client_id, payload))
+
+
+class SummarizationWebSocketManager(FakeWebSocketManager):
+    async def request_tool(self, client_id: str, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+        self.tool_requests.append((client_id, tool_name, params))
+        if tool_name == "inspect_area":
+            return {
+                "center": params["center"],
+                "radius": params["radius"],
+                "detailed": True,
+                "filter_terrain": params.get("filter_terrain", True),
+                "non_air_blocks": [
+                    {"x": idx, "y": 64, "z": 0, "block_id": "minecraft:oak_planks"}
+                    for idx in range(120)
+                ],
+                "block_counts": {"minecraft:oak_planks": 120},
+            }
+        return {"placed_count": 2, "anchor": {"x": 0, "y": 64, "z": 0}}
 
 
 class FakeConvexClient(ConvexHttpClient):
@@ -196,7 +215,9 @@ async def test_place_blocks_tool_routes_through_websocket_manager_and_emits_chat
     first_call = anthropic_client.messages.calls[0]
     assert first_call["model"] == CHAT_MODEL
     assert first_call["max_tokens"] == 768
-    assert first_call["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert isinstance(first_call["system"], list)
+    assert first_call["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert first_call["tools"][-1]["cache_control"] == {"type": "ephemeral"}
     assert {tool["name"] for tool in first_call["tools"]} == EXPECTED_TOOL_NAMES
 
     assert ws.sent_payloads[0][0] == "client-1"
@@ -230,7 +251,12 @@ async def test_world_tool_routes_through_websocket_manager() -> None:
         (
             "client-2",
             "inspect_area",
-            {"center": {"x": 10, "y": 64, "z": 20}, "radius": 4, "detailed": False},
+            {
+                "center": {"x": 10, "y": 64, "z": 20},
+                "radius": 4,
+                "detailed": False,
+                "filter_terrain": True,
+            },
         )
     ]
     assert ws.sent_payloads[0][1]["payload"]["message"] == "Area inspected."
@@ -288,6 +314,53 @@ async def test_detailed_inspect_radius_limit_is_reported_back_to_model() -> None
     assert tool_result["is_error"] is True
     assert "inspect_area with detailed=true requires radius <= 6" in tool_result["content"]
     assert ws.tool_requests == []
+
+
+@pytest.mark.asyncio
+async def test_older_tool_results_are_summarized_in_followup_rounds() -> None:
+    anthropic_client = FakeAnthropicClient(
+        responses=[
+            _tool_use_response(
+                "inspect_area",
+                {"center": {"x": 0, "y": 64, "z": 0}, "radius": 4, "detailed": True},
+            ),
+            _tool_use_response(
+                "place_blocks",
+                {
+                    "placements": [
+                        {"x": 0, "y": 64, "z": 0, "block_id": "minecraft:stone"},
+                        {"x": 1, "y": 64, "z": 0, "block_id": "minecraft:stone"},
+                    ]
+                },
+            ),
+            _text_response("Done."),
+        ]
+    )
+    ws = SummarizationWebSocketManager()
+    orchestrator = ChatOrchestrator(
+        anthropic_api_key="test-key",
+        websocket_manager=ws,
+        anthropic_client_factory=lambda api_key: anthropic_client,
+    )
+
+    await orchestrator._run_chat(chat_id="chat-summary", client_id="client-summary", user_message="build")
+
+    third_call = anthropic_client.messages.calls[2]
+    tool_result_messages = [
+        message
+        for message in third_call["messages"]
+        if message["role"] == "user" and isinstance(message["content"], list)
+    ]
+    summarized_found = False
+    for message in tool_result_messages:
+        for block in message["content"]:
+            content = block.get("content")
+            if isinstance(content, str) and content.startswith("[summarized tool_result]"):
+                summarized_found = True
+                break
+        if summarized_found:
+            break
+    assert summarized_found is True
 
 
 @pytest.mark.asyncio
@@ -399,10 +472,11 @@ async def test_supermemory_is_used_for_context_and_meaningful_tool_outcomes() ->
     await orchestrator._run_chat(chat_id="chat-5", client_id="client-6", user_message="build something")
 
     first_call = anthropic_client.messages.calls[0]
-    assert "Relevant long-term memory" in first_call["system"]
-    assert "Profile static:" in first_call["system"]
-    assert "Profile dynamic:" in first_call["system"]
-    assert "User prefers oak builds." in first_call["system"]
+    system_text = first_call["system"][0]["text"]
+    assert "Relevant long-term memory" in system_text
+    assert "Profile static:" in system_text
+    assert "Profile dynamic:" in system_text
+    assert "User prefers oak builds." in system_text
     assert supermemory.profile_calls == ["default:client-6"]
     assert supermemory.search_calls == [
         {
