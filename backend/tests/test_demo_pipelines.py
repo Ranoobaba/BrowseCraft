@@ -13,6 +13,7 @@ import pytest
 import browsecraft_backend.demo_pipelines as demo_pipelines
 from browsecraft_backend.demo_pipelines import DemoPipelines, _best_candidate
 from browsecraft_backend.models import ImagineRequest, SearchRequest
+from browser_use_sdk._core.errors import BrowserUseError
 
 
 class FakeWebSocketManager:
@@ -203,6 +204,7 @@ async def test_search_pipeline_emits_expected_status_sequence(
     class FakeTaskRun:
         def __init__(self) -> None:
             self.result = SimpleNamespace(
+                session=SimpleNamespace(id="session-1"),
                 output=demo_pipelines._SearchCandidates(
                     candidates=[
                         demo_pipelines._SearchCandidate(
@@ -214,26 +216,34 @@ async def test_search_pipeline_emits_expected_status_sequence(
                         )
                     ]
                 ),
-                task=SimpleNamespace(id="task-1", outputFiles=[]),
             )
 
-        async def __aiter__(self):
-            yield SimpleNamespace(number=1)
+        def __await__(self):
+            async def _result():
+                return self.result
+
+            return _result().__await__()
 
     class FakeBrowserUse:
         def __init__(self, api_key: str, timeout: float) -> None:
             assert api_key == "test-browser-key"
             self.timeout = timeout
+            self.sessions = SimpleNamespace(files=self._get_session_files)
+
+        async def _get_session_files(self, _session_id: str, include_urls: bool | None = None) -> Any:
+            return SimpleNamespace(files=[])
 
         def run(self, **kwargs: Any) -> FakeTaskRun:
-            assert kwargs["allowed_domains"] == ["planetminecraft.com", "www.planetminecraft.com"]
-            assert kwargs["llm"] == "browser-use-llm"
+            assert set(kwargs.keys()) == {"task", "output_schema"}
+            assert kwargs["output_schema"] == demo_pipelines._SearchCandidates
+            assert "Use Planet Minecraft only." in kwargs["task"]
+            assert "Never return /download/worldmap/" in kwargs["task"]
             return FakeTaskRun()
 
         async def close(self) -> None:
             return None
 
-    monkeypatch.setattr(demo_pipelines, "AsyncBrowserUse", FakeBrowserUse)
+    monkeypatch.setattr(demo_pipelines, "AsyncBrowserUseV3", FakeBrowserUse)
     monkeypatch.setattr(demo_pipelines.httpx, "AsyncClient", FakeHttpClient)
 
     pipelines = DemoPipelines(
@@ -260,3 +270,117 @@ async def test_search_pipeline_emits_expected_status_sequence(
     params = ws.tool_requests[0][2]
     assert tool_name == "set_plan"
     assert len(params["placements"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_search_pipeline_falls_back_to_v2_on_v3_sandbox_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    schem_bytes = _minimal_schem_bytes()
+    ws = FakeWebSocketManager()
+    fallback_hit = False
+
+    class FakeHttpResponse:
+        def __init__(self, content: bytes) -> None:
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeHttpClient:
+        def __init__(self, *_: Any, **__: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeHttpClient:
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, exc_tb: Any) -> None:
+            return None
+
+        async def get(self, url: str) -> FakeHttpResponse:
+            assert url == "https://downloads.example/castle-v2.schem"
+            return FakeHttpResponse(schem_bytes)
+
+    class FakeV3BrowserUse:
+        def __init__(self, api_key: str, timeout: float) -> None:
+            assert api_key == "test-browser-key"
+            self.api_key = api_key
+            self.timeout = timeout
+
+        async def run(self, **_: Any) -> None:
+            raise BrowserUseError(500, "Failed to start agent sandbox")
+
+        async def close(self) -> None:
+            return None
+
+    class FakeV2BrowserUse:
+        def __init__(self, api_key: str, timeout: float) -> None:
+            assert api_key == "test-browser-key"
+            assert timeout == 300.0
+
+        async def run(self, **kwargs: Any) -> Any:
+            assert set(kwargs.keys()) == {
+                "task",
+                "output_schema",
+                "llm",
+                "start_url",
+                "max_steps",
+                "allowed_domains",
+                "flash_mode",
+                "thinking",
+                "vision",
+                "system_prompt_extension",
+            }
+            nonlocal fallback_hit
+            fallback_hit = True
+
+            task = SimpleNamespace(
+                id="task-1",
+                session_id="session-1",
+                output_files=[
+                    SimpleNamespace(file_name="castle-v2.schem", download_url="https://downloads.example/castle-v2.schem"),
+                ],
+            )
+            return SimpleNamespace(
+                task=task,
+                output=demo_pipelines._SearchCandidates(
+                    candidates=[
+                        demo_pipelines._SearchCandidate(
+                            canonical_url="https://www.planetminecraft.com/project/castle-v2/",
+                            filename="castle-v2.schem",
+                            title="Medieval Castle v2",
+                            score=0.77,
+                            download_url=None,
+                        )
+                    ]
+                ),
+            )
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(demo_pipelines, "AsyncBrowserUseV3", FakeV3BrowserUse)
+    monkeypatch.setattr(demo_pipelines, "AsyncBrowserUseV2", FakeV2BrowserUse)
+    monkeypatch.setattr(demo_pipelines.httpx, "AsyncClient", FakeHttpClient)
+
+    pipelines = DemoPipelines(
+        websocket_manager=ws,
+        browser_use_api_key="test-browser-key",
+        browser_use_llm="browser-use-llm",
+        browser_use_skill_id=None,
+        chat_submitter=None,
+    )
+
+    await pipelines.submit_search(SearchRequest(client_id="client-5", query="medieval castle schematic"))
+    await _drain_tasks(pipelines)
+
+    assert fallback_hit
+    statuses = _statuses(ws)
+    assert statuses == [
+        "🔎 Searching Planet Minecraft...",
+        "⚠️ Browser-Use v3 unavailable, retrying with v2 runtime.",
+        "✅ Found: Medieval Castle v2",
+        "📥 Downloading schematic...",
+        "📐 Loaded 4 blocks into preview",
+        "✓ Done",
+    ]
