@@ -10,6 +10,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildCommandControllerTest {
+    private static final BuildCommandController.ChatEventListener NO_OP_CHAT_EVENTS = new BuildCommandController.ChatEventListener() {
+        @Override
+        public void onUserMessage(String message) {
+        }
+
+        @Override
+        public void onAssistantDelta(String delta) {
+        }
+
+        @Override
+        public void onAssistantMessage(String message) {
+        }
+
+        @Override
+        public void onToolStatus(String status) {
+        }
+    };
 
     @Test
     void chatUsesActiveSessionCreatedBySessionNew() {
@@ -22,7 +39,8 @@ class BuildCommandControllerTest {
                 directExecutor(),
                 directExecutor(),
                 statuses::add,
-                () -> "world-1"
+                () -> "world-1",
+                NO_OP_CHAT_EVENTS
         );
 
         controller.createSession();
@@ -31,6 +49,7 @@ class BuildCommandControllerTest {
         assertEquals("world-1", backend.lastChatWorldId);
         assertEquals("session-1", backend.lastChatSessionId);
         assertEquals("hello", backend.lastChatMessage);
+        assertEquals("build", backend.lastChatMode);
         assertTrue(statuses.contains("active session: session-1"));
     }
 
@@ -45,7 +64,8 @@ class BuildCommandControllerTest {
                 directExecutor(),
                 message -> {
                 },
-                () -> "world-2"
+                () -> "world-2",
+                NO_OP_CHAT_EVENTS
         );
 
         controller.createSession();
@@ -67,7 +87,8 @@ class BuildCommandControllerTest {
                 directExecutor(),
                 message -> {
                 },
-                () -> "world-3"
+                () -> "world-3",
+                NO_OP_CHAT_EVENTS
         );
 
         controller.switchSession("session-b");
@@ -91,13 +112,35 @@ class BuildCommandControllerTest {
                 directExecutor(),
                 directExecutor(),
                 statuses::add,
-                () -> "world-4"
+                () -> "world-4",
+                NO_OP_CHAT_EVENTS
         );
 
         controller.switchSession("session-a");
         controller.listSessions();
 
         assertTrue(statuses.contains("*session-a, session-b"));
+    }
+
+    @Test
+    void planSubmissionUsesPlanMode() {
+        FakeBackend backend = new FakeBackend();
+        BuildCommandController controller = new BuildCommandController(
+                "client-5",
+                backend,
+                new OverlayState(),
+                directExecutor(),
+                directExecutor(),
+                message -> {
+                },
+                () -> "world-5",
+                NO_OP_CHAT_EVENTS
+        );
+
+        controller.submitPlan("plan a tower");
+
+        assertEquals("plan", backend.lastChatMode);
+        assertEquals("plan a tower", backend.lastChatMessage);
     }
 
     private Executor directExecutor() {
@@ -109,6 +152,7 @@ class BuildCommandControllerTest {
         private String lastChatMessage;
         private String lastChatWorldId;
         private String lastChatSessionId;
+        private String lastChatMode;
         private String lastCreateClientId;
         private String lastCreateWorldId;
         private String lastListClientId;
@@ -122,10 +166,11 @@ class BuildCommandControllerTest {
         }
 
         @Override
-        public void submitChatMessage(String message, String clientId, String worldId, String sessionId) {
+        public void submitChatMessage(String message, String clientId, String worldId, String sessionId, String mode) {
             this.lastChatMessage = message;
             this.lastChatWorldId = worldId;
             this.lastChatSessionId = sessionId;
+            this.lastChatMode = mode;
         }
 
         @Override
@@ -147,6 +192,14 @@ class BuildCommandControllerTest {
             this.lastSwitchClientId = clientId;
             this.lastSwitchWorldId = worldId;
             this.lastSwitchedSessionId = sessionId;
+        }
+
+        @Override
+        public void submitSearch(String clientId, String query) {
+        }
+
+        @Override
+        public void submitImagine(String clientId, String prompt) {
         }
 
         @Override

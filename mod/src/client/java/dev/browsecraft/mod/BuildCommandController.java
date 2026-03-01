@@ -7,6 +7,16 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public final class BuildCommandController implements BuildBackendListener {
+    public interface ChatEventListener {
+        void onUserMessage(String message);
+
+        void onAssistantDelta(String delta);
+
+        void onAssistantMessage(String message);
+
+        void onToolStatus(String status);
+    }
+
     private final String clientId;
     private final BuildBackend backend;
     private final OverlayState overlayState;
@@ -14,6 +24,7 @@ public final class BuildCommandController implements BuildBackendListener {
     private final Executor workerExecutor;
     private final Consumer<String> statusSink;
     private final Supplier<String> worldIdSupplier;
+    private final ChatEventListener chatEvents;
     private String activeSessionId;
 
     public BuildCommandController(
@@ -23,7 +34,8 @@ public final class BuildCommandController implements BuildBackendListener {
             Executor mainExecutor,
             Executor workerExecutor,
             Consumer<String> statusSink,
-            Supplier<String> worldIdSupplier
+            Supplier<String> worldIdSupplier,
+            ChatEventListener chatEvents
     ) {
         this.clientId = clientId;
         this.backend = backend;
@@ -32,14 +44,27 @@ public final class BuildCommandController implements BuildBackendListener {
         this.workerExecutor = workerExecutor;
         this.statusSink = statusSink;
         this.worldIdSupplier = worldIdSupplier;
+        this.chatEvents = chatEvents;
         this.backend.connect(this);
     }
 
     public void submitChat(String message) {
-        submitChat(message, null);
+        submitChat(message, null, "build");
     }
 
     public void submitChat(String message, String explicitSessionId) {
+        submitChat(message, explicitSessionId, "build");
+    }
+
+    public void submitPlan(String message) {
+        submitChat(message, null, "plan");
+    }
+
+    public void submitPlan(String message, String explicitSessionId) {
+        submitChat(message, explicitSessionId, "plan");
+    }
+
+    private void submitChat(String message, String explicitSessionId, String mode) {
         String worldId;
         try {
             worldId = worldIdSupplier.get();
@@ -55,9 +80,10 @@ public final class BuildCommandController implements BuildBackendListener {
         String finalSessionIdForRequest = sessionIdForRequest;
 
         statusSink.accept("thinking...");
+        mainExecutor.execute(() -> chatEvents.onUserMessage(message));
         workerExecutor.execute(() -> {
             try {
-                backend.submitChatMessage(message, clientId, worldId, finalSessionIdForRequest);
+                backend.submitChatMessage(message, clientId, worldId, finalSessionIdForRequest, mode);
             } catch (Exception error) {
                 mainExecutor.execute(() -> statusSink.accept("chat submit failed: " + error.getMessage()));
             }
@@ -144,11 +170,48 @@ public final class BuildCommandController implements BuildBackendListener {
 
     @Override
     public void onStatus(String jobId, String stage, String message) {
-        mainExecutor.execute(() -> statusSink.accept(stage + ": " + message));
+        mainExecutor.execute(() -> {
+            switch (stage) {
+                case "chat.delta" -> chatEvents.onAssistantDelta(message);
+                case "chat.response" -> {
+                    chatEvents.onAssistantMessage(message);
+                    statusSink.accept("chat: " + message);
+                }
+                case "tool_status" -> {
+                    chatEvents.onToolStatus(message);
+                    statusSink.accept(message);
+                }
+                default -> statusSink.accept(stage + ": " + message);
+            }
+        });
     }
 
     @Override
     public void onError(String jobId, String code, String message) {
         mainExecutor.execute(() -> statusSink.accept(code + ": " + message));
+    }
+
+    public void submitSearch(String query) {
+        statusSink.accept("searching...");
+        mainExecutor.execute(() -> chatEvents.onUserMessage("/search " + query));
+        workerExecutor.execute(() -> {
+            try {
+                backend.submitSearch(clientId, query);
+            } catch (Exception error) {
+                mainExecutor.execute(() -> statusSink.accept("search failed: " + error.getMessage()));
+            }
+        });
+    }
+
+    public void submitImagine(String prompt) {
+        statusSink.accept("imagining...");
+        mainExecutor.execute(() -> chatEvents.onUserMessage("/imagine " + prompt));
+        workerExecutor.execute(() -> {
+            try {
+                backend.submitImagine(clientId, prompt);
+            } catch (Exception error) {
+                mainExecutor.execute(() -> statusSink.accept("imagine failed: " + error.getMessage()));
+            }
+        });
     }
 }

@@ -352,6 +352,22 @@ def _dispatch_tool(world: HeadlessVoxelWorld, tool: str, params: dict[str, Any])
             to_corner=params["to_corner"],
             block_id=str(params["block_id"]),
         )
+    if tool == "set_plan":
+        placements = params.get("placements", [])
+        if not isinstance(placements, list):
+            raise RuntimeError("set_plan expects placements list")
+        return {
+            "loaded_count": len(placements),
+            "overlay": {
+                "has_plan": True,
+                "block_count": len(placements),
+                "anchor": {"x": 0, "y": 0, "z": 0},
+                "rotation_quarter_turns": 0,
+                "preview_mode": True,
+                "confirmed": False,
+                "remaining_count": len(placements),
+            },
+        }
     if tool == "undo_last":
         return world.undo_last()
     if tool == "get_active_overlay":

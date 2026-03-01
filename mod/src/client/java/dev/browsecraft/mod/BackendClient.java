@@ -78,12 +78,14 @@ public final class BackendClient implements BuildBackend {
             String message,
             String clientId,
             String worldId,
-            String sessionId
+            String sessionId,
+            String mode
     ) throws IOException, InterruptedException {
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("client_id", clientId);
         requestBody.addProperty("message", message);
         requestBody.addProperty("world_id", worldId);
+        requestBody.addProperty("mode", mode);
         if (sessionId != null && !sessionId.isBlank()) {
             requestBody.addProperty("session_id", sessionId);
         }
@@ -134,6 +136,22 @@ public final class BackendClient implements BuildBackend {
         requestBody.addProperty("world_id", worldId);
         requestBody.addProperty("session_id", sessionId);
         postJson("/v1/session/switch", requestBody);
+    }
+
+    @Override
+    public void submitSearch(String clientId, String query) throws IOException, InterruptedException {
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("client_id", clientId);
+        requestBody.addProperty("query", query);
+        postJson("/v1/search", requestBody);
+    }
+
+    @Override
+    public void submitImagine(String clientId, String prompt) throws IOException, InterruptedException {
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("client_id", clientId);
+        requestBody.addProperty("prompt", prompt);
+        postJson("/v1/imagine", requestBody);
     }
 
     private HttpResponse<String> postJson(String endpoint, JsonObject requestBody) throws IOException, InterruptedException {
@@ -255,6 +273,10 @@ public final class BackendClient implements BuildBackend {
             handleChatDelta(envelope);
             return;
         }
+        if ("chat.tool_status".equals(type)) {
+            handleToolStatus(envelope);
+            return;
+        }
         if ("tool.request".equals(type)) {
             handleToolRequest(socket, envelope);
             return;
@@ -269,7 +291,7 @@ public final class BackendClient implements BuildBackend {
 
         JsonObject payload = requiredObject(envelope, "payload");
         String message = requiredString(payload, "message");
-        currentListener.onStatus("", "chat", message);
+        currentListener.onStatus("", "chat.response", message);
     }
 
     private void handleChatDelta(JsonObject envelope) {
@@ -279,8 +301,19 @@ public final class BackendClient implements BuildBackend {
         }
 
         JsonObject payload = requiredObject(envelope, "payload");
-        String partial = requiredString(payload, "partial");
-        currentListener.onStatus("", "chat", partial);
+        String delta = payload.has("delta") ? requiredString(payload, "delta") : requiredString(payload, "partial");
+        currentListener.onStatus("", "chat.delta", delta);
+    }
+
+    private void handleToolStatus(JsonObject envelope) {
+        BuildBackendListener currentListener = listener;
+        if (currentListener == null) {
+            return;
+        }
+
+        JsonObject payload = requiredObject(envelope, "payload");
+        String status = requiredString(payload, "status");
+        currentListener.onStatus("", "tool_status", status);
     }
 
     private void handleToolRequest(WebSocket socket, JsonObject envelope) {

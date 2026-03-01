@@ -12,7 +12,6 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.ScreenshotRecorder;
@@ -110,6 +109,9 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private final List<JsonObject> buildTestStatusTimeline = new ArrayList<>();
     private int inventoryPollCountdown;
     private volatile String latestStatusMessage = "";
+    private final List<ChatPanelScreen.ChatMessage> chatHistory = new ArrayList<>();
+    private String activeToolStatus = "";
+    private boolean assistantStreaming;
 
     @Override
     public void onInitializeClient() {
@@ -137,7 +139,28 @@ public final class BrowseCraftClient implements ClientModInitializer {
                 mainExecutor,
                 workerExecutor,
                 statusSink,
-                () -> worldIdResolver.resolve(MinecraftClient.getInstance())
+                () -> worldIdResolver.resolve(MinecraftClient.getInstance()),
+                new BuildCommandController.ChatEventListener() {
+                    @Override
+                    public void onUserMessage(String message) {
+                        handleChatUserMessage(message);
+                    }
+
+                    @Override
+                    public void onAssistantDelta(String delta) {
+                        handleChatAssistantDelta(delta);
+                    }
+
+                    @Override
+                    public void onAssistantMessage(String message) {
+                        handleChatAssistantMessage(message);
+                    }
+
+                    @Override
+                    public void onToolStatus(String status) {
+                        handleToolStatus(status);
+                    }
+                }
         );
 
         registerKeyBindings();
@@ -151,7 +174,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
         this.openChatKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.browsecraft.open_chat",
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_G,
+                GLFW.GLFW_KEY_B,
                 keyCategory
         ));
         this.rotateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -195,10 +218,40 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     }));
 
             dispatcher.register(literal("chat")
+                    .executes(context -> {
+                        openChatPanel(MinecraftClient.getInstance(), "");
+                        return 1;
+                    })
                     .then(argument("message", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String message = StringArgumentType.getString(context, "message");
-                                commandController.submitChat(message);
+                                openChatPanel(MinecraftClient.getInstance(), message);
+                                return 1;
+                            })));
+
+            dispatcher.register(literal("plan")
+                    .then(argument("message", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                String message = StringArgumentType.getString(context, "message");
+                                commandController.submitPlan(message);
+                                return 1;
+                            })));
+
+            dispatcher.register(literal("search")
+                    .then(argument("query", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                String query = StringArgumentType.getString(context, "query");
+                                openChatPanel(MinecraftClient.getInstance(), "");
+                                commandController.submitSearch(query);
+                                return 1;
+                            })));
+
+            dispatcher.register(literal("imagine")
+                    .then(argument("prompt", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                String prompt = StringArgumentType.getString(context, "prompt");
+                                openChatPanel(MinecraftClient.getInstance(), "");
+                                commandController.submitImagine(prompt);
                                 return 1;
                             })));
 
@@ -244,8 +297,12 @@ public final class BrowseCraftClient implements ClientModInitializer {
 
     private void registerClientTick() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (openChatKey.wasPressed()) {
-                client.setScreen(new ChatScreen("/chat ", false));
+            while (openChatKey.wasPressed()) {
+                if (client.currentScreen instanceof ChatPanelScreen) {
+                    client.setScreen(null);
+                } else {
+                    openChatPanel(client, "");
+                }
             }
 
             if (client.player == null || client.world == null) {
@@ -330,6 +387,74 @@ public final class BrowseCraftClient implements ClientModInitializer {
                 }
             }
         });
+    }
+
+    private void openChatPanel(MinecraftClient client, String prefill) {
+        if (client == null) {
+            return;
+        }
+        client.setScreen(new ChatPanelScreen(
+                this::submitChatFromPanel,
+                this::chatHistorySnapshot,
+                this::toolStatusLabel,
+                prefill
+        ));
+    }
+
+    private void submitChatFromPanel(String message) {
+        commandController.submitChat(message);
+    }
+
+    private List<ChatPanelScreen.ChatMessage> chatHistorySnapshot() {
+        return List.copyOf(chatHistory);
+    }
+
+    private String toolStatusLabel() {
+        if (activeToolStatus.isBlank()) {
+            if (assistantStreaming) {
+                return "thinking...";
+            }
+            return "";
+        }
+        return activeToolStatus;
+    }
+
+    private void handleChatUserMessage(String message) {
+        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.USER, message));
+        assistantStreaming = true;
+    }
+
+    private void handleChatAssistantDelta(String delta) {
+        if (delta.isEmpty()) {
+            return;
+        }
+        int lastIndex = chatHistory.size() - 1;
+        if (lastIndex < 0 || chatHistory.get(lastIndex).role() != ChatPanelScreen.ChatRole.ASSISTANT || !assistantStreaming) {
+            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, delta));
+        } else {
+            ChatPanelScreen.ChatMessage last = chatHistory.get(lastIndex);
+            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(last.role(), last.text() + delta));
+        }
+        assistantStreaming = true;
+    }
+
+    private void handleChatAssistantMessage(String message) {
+        int lastIndex = chatHistory.size() - 1;
+        if (lastIndex >= 0 && chatHistory.get(lastIndex).role() == ChatPanelScreen.ChatRole.ASSISTANT) {
+            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
+        } else {
+            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
+        }
+        assistantStreaming = false;
+        activeToolStatus = "";
+    }
+
+    private void handleToolStatus(String status) {
+        activeToolStatus = status;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null && client.currentScreen instanceof ChatPanelScreen) {
+            client.player.sendMessage(Text.literal(status), true);
+        }
     }
 
     private void runBuildTestCommand(MinecraftClient client) {
@@ -687,6 +812,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
                 case "inspect_area" -> toolInspectArea(client, params);
                 case "place_blocks" -> toolPlaceBlocks(client, params);
                 case "fill_region" -> toolFillRegion(client, params);
+                case "set_plan" -> toolSetPlan(client, params);
                 case "undo_last" -> toolUndoLast();
                 case "get_active_overlay" -> activeOverlaySummary(overlayState.snapshot());
                 case "modify_overlay" -> toolModifyOverlay(params);
@@ -877,6 +1003,43 @@ public final class BrowseCraftClient implements ClientModInitializer {
         result.addProperty("fill_region", true);
         result.add("from_corner", blockPosToJson(fromCorner));
         result.add("to_corner", blockPosToJson(toCorner));
+        return result;
+    }
+
+    private JsonObject toolSetPlan(MinecraftClient client, JsonObject params) {
+        JsonElement placementsElement = params.get("placements");
+        if (placementsElement == null || !placementsElement.isJsonArray()) {
+            throw new IllegalArgumentException("Expected array field: placements");
+        }
+        JsonArray placementsJson = placementsElement.getAsJsonArray();
+        if (placementsJson.isEmpty()) {
+            throw new IllegalArgumentException("placements must contain at least one block");
+        }
+
+        List<BuildPlacement> relativePlacements = new ArrayList<>(placementsJson.size());
+        for (JsonElement element : placementsJson) {
+            if (!element.isJsonObject()) {
+                throw new IllegalArgumentException("placements must contain objects");
+            }
+            JsonObject placementJson = element.getAsJsonObject();
+            relativePlacements.add(new BuildPlacement(
+                    requiredInt(placementJson, "dx"),
+                    requiredInt(placementJson, "dy"),
+                    requiredInt(placementJson, "dz"),
+                    normalizeBlockId(requiredString(placementJson, "block_id")),
+                    Map.of()
+            ));
+        }
+
+        overlayState.setPlan(new BuildPlan(relativePlacements.size(), List.copyOf(relativePlacements)));
+        if (client.player != null) {
+            overlayState.applyInitialPreviewAnchor(client.player.getBlockPos().offset(client.player.getHorizontalFacing()));
+        }
+        overlayPlacementRevision++;
+
+        JsonObject result = new JsonObject();
+        result.addProperty("loaded_count", relativePlacements.size());
+        result.add("overlay", activeOverlaySummary(overlayState.snapshot()));
         return result;
     }
 

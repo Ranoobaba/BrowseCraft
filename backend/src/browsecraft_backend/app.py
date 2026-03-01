@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Callable
@@ -12,9 +13,13 @@ from fastapi.exceptions import RequestValidationError
 from .chat_orchestrator import ChatOrchestrator
 from .config import Settings, get_settings
 from .convex_client import ConvexHttpClient
+from .demo_pipelines import DemoPipelines
 from .models import (
+    AsyncJobAcceptedResponse,
     ChatAcceptedResponse,
     ChatRequest,
+    ImagineRequest,
+    SearchRequest,
     SessionCreatedResponse,
     SessionListResponse,
     SessionNewRequest,
@@ -29,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 HttpClientFactory = Callable[[], httpx.AsyncClient]
 ChatOrchestratorFactory = Callable[[Settings, WebSocketManager], ChatOrchestrator]
+DemoPipelinesFactory = Callable[[Settings, WebSocketManager, ChatOrchestrator], DemoPipelines]
 
 
 def _build_http_client() -> httpx.AsyncClient:
@@ -43,10 +49,26 @@ def _build_chat_orchestrator(settings: Settings, ws_manager: WebSocketManager) -
     )
 
 
+def _build_demo_pipelines(
+    settings: Settings,
+    ws_manager: WebSocketManager,
+    chat_orchestrator: ChatOrchestrator,
+) -> DemoPipelines:
+    return DemoPipelines(
+        websocket_manager=ws_manager,
+        browser_use_api_key=settings.browser_use_api_key,
+        browser_use_llm=settings.browser_use_llm,
+        browser_use_skill_id=settings.browser_use_planet_minecraft_skill_id,
+        tripo_api_key=settings.tripo_api_key,
+        chat_submitter=chat_orchestrator.submit_chat,
+    )
+
+
 def create_app(
     *,
     http_client: HttpClientFactory | None = None,
     chat_orchestrator: ChatOrchestratorFactory | None = None,
+    demo_pipelines: DemoPipelinesFactory | None = None,
 ) -> FastAPI:
     app = FastAPI(title="BrowseCraft Backend", version="0.1.0")
 
@@ -57,6 +79,7 @@ def create_app(
 
     client_factory = http_client or _build_http_client
     chat_factory = chat_orchestrator or _build_chat_orchestrator
+    pipelines_factory = demo_pipelines or _build_demo_pipelines
 
     client = client_factory()
     convex = (
@@ -66,6 +89,7 @@ def create_app(
     )
     supermemory = SupermemoryClient(settings.supermemory_api_key) if settings.supermemory_api_key else None
     chat = chat_factory(settings, ws_manager)
+    pipelines = pipelines_factory(settings, ws_manager, chat)
     if isinstance(chat, ChatOrchestrator):
         chat.configure_integrations(convex_client=convex, supermemory_client=supermemory)
 
@@ -73,6 +97,7 @@ def create_app(
     app.state.http_client = client
     app.state.websocket_manager = ws_manager
     app.state.chat_orchestrator = chat
+    app.state.demo_pipelines = pipelines
     app.state.convex = convex
     app.state.supermemory = supermemory
 
@@ -103,6 +128,14 @@ def create_app(
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.post("/v1/search", response_model=AsyncJobAcceptedResponse)
+    async def search_schematics(payload: SearchRequest) -> AsyncJobAcceptedResponse:
+        return await pipelines.submit_search(payload)
+
+    @app.post("/v1/imagine", response_model=AsyncJobAcceptedResponse)
+    async def imagine_structure(payload: ImagineRequest) -> AsyncJobAcceptedResponse:
+        return await pipelines.submit_imagine(payload)
+
     @app.post("/v1/session/new", response_model=SessionCreatedResponse)
     async def create_session(payload: SessionNewRequest) -> SessionCreatedResponse:
         return await chat.create_session(client_id=payload.client_id, world_id=payload.world_id)
@@ -128,6 +161,8 @@ def create_app(
     @app.websocket("/v1/ws/{client_id}")
     async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
         await ws_manager.connect(client_id, websocket)
+        if isinstance(chat, ChatOrchestrator):
+            asyncio.create_task(chat.warmup_prompt_cache())
         try:
             while True:
                 raw_message = await websocket.receive_text()

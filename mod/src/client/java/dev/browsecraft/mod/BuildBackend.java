@@ -10,7 +10,8 @@ public interface BuildBackend {
             String message,
             String clientId,
             String worldId,
-            String sessionId
+            String sessionId,
+            String mode
     ) throws IOException, InterruptedException;
 
     String createSession(String clientId, String worldId) throws IOException, InterruptedException;
@@ -18,6 +19,10 @@ public interface BuildBackend {
     List<String> listSessions(String clientId, String worldId) throws IOException, InterruptedException;
 
     void switchSession(String clientId, String worldId, String sessionId) throws IOException, InterruptedException;
+
+    void submitSearch(String clientId, String query) throws IOException, InterruptedException;
+
+    void submitImagine(String clientId, String prompt) throws IOException, InterruptedException;
 
     void close();
 }

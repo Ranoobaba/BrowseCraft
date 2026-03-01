@@ -33,6 +33,8 @@ _SYSTEM_PROMPT = (
     "You are BrowseCraft's Minecraft in-game assistant.\n"
     "Keep responses concise and action-oriented.\n"
     "Minecraft coordinates: +x=east, -x=west, +y=up, -y=down, +z=south, -z=north.\n"
+    "The live player_position is already injected in the system prompt. "
+    "Do not call player_position unless you suspect the player moved during this request.\n"
     "Always anchor spatial reasoning to the live player_position for this request. "
     "Do not assume default world heights like y=64.\n"
     "Treat block_x/block_y/block_z from player_position as the authoritative local origin unless the user gives "
@@ -46,6 +48,11 @@ _SYSTEM_PROMPT = (
     "For axis-aligned cuboids (walls, floors, roofs, boxes), prefer fill_region over enumerating many blocks.\n"
     "For iterative edits, preserve existing structure and apply minimal diffs instead of rebuilding unrelated parts.\n"
     "For large custom builds, split work into multiple place_blocks calls instead of one huge placement list.\n"
+    "Default mode is direct building: use place_blocks/fill_region to place blocks immediately.\n"
+    "Use set_plan only when the user explicitly asks for a preview/blueprint/plan, "
+    "or when the build is large enough that positioning first is safer.\n"
+    "When the user asks for creative structures, use varied materials, depth/layering, "
+    "decorative details, and stairs/slabs where appropriate so results feel hand-built.\n"
     "If a placement batch is clearly wrong, call undo_last and retry with corrected coordinates.\n"
     "Use tools for factual game state instead of guessing."
 )
@@ -58,6 +65,7 @@ _TOOL_RESULT_SUMMARY_PREFIX = "[summarized tool_result]"
 _MEMORY_OUTCOME_TOOLS = {
     "place_blocks",
     "fill_region",
+    "set_plan",
     "undo_last",
     "modify_overlay",
     "save_blueprint",
@@ -101,6 +109,18 @@ class _InspectAreaArgs(_ToolArgs):
 
 class _PlaceBlocksArgs(_ToolArgs):
     placements: list[_PlaceBlockArgs] = Field(min_length=1)
+
+
+class _PlanPlacementArgs(_ToolArgs):
+    dx: int
+    dy: int
+    dz: int
+    block_id: str = Field(min_length=1)
+    block_state: dict[str, str] = Field(default_factory=dict)
+
+
+class _SetPlanArgs(_ToolArgs):
+    placements: list[_PlanPlacementArgs] = Field(min_length=1)
 
 
 class _FillRegionArgs(_ToolArgs):
@@ -277,6 +297,11 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
         "input_schema": _FillRegionArgs.model_json_schema(),
     },
     {
+        "name": "set_plan",
+        "description": "Load a relative-coordinate plan into preview mode as a ghost overlay.",
+        "input_schema": _SetPlanArgs.model_json_schema(),
+    },
+    {
         "name": "undo_last",
         "description": "Undo the most recent placement batch from place_blocks.",
         "input_schema": _NoArgs.model_json_schema(),
@@ -334,6 +359,8 @@ class ChatOrchestrator:
         self._active_sessions: dict[_SessionKey, str] = {}
         self._session_lock = asyncio.Lock()
         self._tasks: set[asyncio.Task[None]] = set()
+        self._warmup_lock = asyncio.Lock()
+        self._warmup_done = False
 
     async def submit_chat(self, request: ChatRequest) -> ChatAcceptedResponse:
         world_id = request.world_id or _DEFAULT_WORLD_ID
@@ -349,6 +376,7 @@ class ChatOrchestrator:
                 chat_id=chat_id,
                 client_id=request.client_id,
                 user_message=request.message,
+                request_mode=request.mode,
                 world_id=world_id,
                 session_id=session_id,
             )
@@ -365,6 +393,43 @@ class ChatOrchestrator:
     ) -> None:
         self._convex_client = convex_client
         self._supermemory_client = supermemory_client
+
+    async def warmup_prompt_cache(self) -> None:
+        if self._warmup_done or not self._anthropic_api_key:
+            return
+        async with self._warmup_lock:
+            if self._warmup_done:
+                return
+            client = self._anthropic_client_factory(self._anthropic_api_key)
+            try:
+                await client.messages.create(
+                    model=self._chat_model,
+                    max_tokens=1,
+                    temperature=0,
+                    system=[
+                        {
+                            "type": "text",
+                            "text": (
+                                f"{_SYSTEM_PROMPT}\n"
+                                "Request mode for this turn: BUILD.\n"
+                                "Live player position for this request (authoritative):\n"
+                                "- x=0.000, y=64.000, z=0.000\n"
+                                "- block_x=0, block_y=64, block_z=0\n"
+                                "- facing=south, dimension=minecraft:overworld\n"
+                                "All placement coordinates in this request must be derived from this live position "
+                                "unless the user explicitly provided absolute coordinates."
+                            ),
+                            "cache_control": _CACHE_CONTROL_EPHEMERAL,
+                        }
+                    ],
+                    tools=_CACHEABLE_TOOL_SCHEMAS,
+                    messages=[{"role": "user", "content": "warmup"}],
+                )
+                self._warmup_done = True
+            except Exception:
+                logger.warning("Prompt cache warmup failed", exc_info=True)
+            finally:
+                await client.close()
 
     async def create_session(self, client_id: str, world_id: str) -> SessionCreatedResponse:
         async with self._session_lock:
@@ -419,6 +484,7 @@ class ChatOrchestrator:
         chat_id: str,
         client_id: str,
         user_message: str,
+        request_mode: Literal["build", "plan"] = "build",
         *,
         world_id: str | None = None,
         session_id: str | None = None,
@@ -436,6 +502,7 @@ class ChatOrchestrator:
                 world_id=resolved_world_id,
                 session_id=resolved_session_id,
                 user_message=user_message,
+                request_mode=request_mode,
             )
             await self._append_history(
                 world_id=resolved_world_id,
@@ -443,9 +510,11 @@ class ChatOrchestrator:
                 user_message=user_message,
                 assistant_message=assistant_text,
             )
+            await self._emit_tool_status(client_id=client_id, status="✓ Done")
         except Exception as exc:
             logger.exception("Chat orchestration failed for client=%s chat_id=%s", client_id, chat_id)
             assistant_text = f"Unable to process chat request: {exc}"
+            await self._emit_tool_status(client_id=client_id, status=f"✗ {exc}")
 
         await self._websocket_manager.send_payload(
             client_id,
@@ -464,6 +533,7 @@ class ChatOrchestrator:
         world_id: str,
         session_id: str,
         user_message: str,
+        request_mode: Literal["build", "plan"],
     ) -> str:
         if not self._anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is required for chat orchestrator")
@@ -479,6 +549,7 @@ class ChatOrchestrator:
         player_position = await self._require_player_position(client_id=client_id)
         system_prompt = (
             f"{_SYSTEM_PROMPT}\n"
+            f"Request mode for this turn: {request_mode.upper()}.\n"
             "Live player position for this request (authoritative):\n"
             f"- x={player_position.x:.3f}, y={player_position.y:.3f}, z={player_position.z:.3f}\n"
             f"- block_x={player_position.block_x}, block_y={player_position.block_y}, block_z={player_position.block_z}\n"
@@ -519,14 +590,23 @@ class ChatOrchestrator:
 
                 tool_results: list[dict[str, Any]] = []
                 for tool_use in tool_uses:
-                    execution = await self._execute_tool(
-                        client_id=client_id,
-                        world_id=world_id,
-                        session_id=session_id,
-                        tool_name=tool_use["name"],
-                        raw_input=tool_use["input"],
-                        player_position=player_position,
-                    )
+                    tool_status = _tool_status_message(tool_use["name"], tool_use["input"])
+                    await self._emit_tool_status(client_id=client_id, status=tool_status)
+                executions = await asyncio.gather(
+                    *[
+                        self._execute_tool(
+                            client_id=client_id,
+                            world_id=world_id,
+                            session_id=session_id,
+                            tool_name=tool_use["name"],
+                            raw_input=tool_use["input"],
+                            player_position=player_position,
+                            cached_player_position=player_position,
+                        )
+                        for tool_use in tool_uses
+                    ]
+                )
+                for tool_use, execution in zip(tool_uses, executions, strict=True):
                     tool_result = {
                         "type": "tool_result",
                         "tool_use_id": tool_use["id"],
@@ -550,7 +630,7 @@ class ChatOrchestrator:
         system_prompt: str,
         messages: list[dict[str, Any]],
     ) -> Any:
-        return await client.messages.create(
+        async with client.messages.stream(
             model=model,
             max_tokens=_MAX_MODEL_OUTPUT_TOKENS,
             temperature=0,
@@ -563,7 +643,37 @@ class ChatOrchestrator:
             ],
             tools=_CACHEABLE_TOOL_SCHEMAS,
             messages=messages,
-        )
+        ) as stream:
+            partial = ""
+            async for event in stream:
+                if event.type != "content_block_delta" or event.delta.type != "text_delta":
+                    continue
+                delta = event.delta.text
+                partial += delta
+                await self._websocket_manager.send_payload(
+                    client_id,
+                    {
+                        "type": "chat.delta",
+                        "chat_id": chat_id,
+                        "payload": {
+                            "delta": delta,
+                            "partial": partial,
+                        },
+                    },
+                )
+            return await stream.get_final_message()
+
+    async def _emit_tool_status(self, *, client_id: str, status: str) -> None:
+        try:
+            await self._websocket_manager.send_payload(
+                client_id,
+                {
+                    "type": "chat.tool_status",
+                    "payload": {"status": status},
+                },
+            )
+        except Exception:
+            logger.warning("Unable to send tool status to client=%s status=%s", client_id, status)
 
     async def _execute_tool(
         self,
@@ -573,6 +683,7 @@ class ChatOrchestrator:
         tool_name: str,
         raw_input: Any,
         player_position: _PlayerPositionResult,
+        cached_player_position: _PlayerPositionResult,
     ) -> _ToolExecutionResult:
         try:
             params = _validate_tool_args(tool_name, raw_input)
@@ -585,7 +696,10 @@ class ChatOrchestrator:
             return _ToolExecutionResult(content=f"Invalid arguments for {tool_name}: {exc}", is_error=True)
 
         try:
-            result = await self._dispatch_tool(client_id=client_id, tool_name=tool_name, params=params)
+            if tool_name == "player_position":
+                result = cached_player_position.model_dump(mode="json")
+            else:
+                result = await self._dispatch_tool(client_id=client_id, tool_name=tool_name, params=params)
             await self._store_tool_memory(
                 client_id=client_id,
                 world_id=world_id,
@@ -869,6 +983,9 @@ def _validate_tool_args(tool_name: str, raw_input: Any) -> dict[str, Any]:
     if tool_name == "place_blocks":
         parsed = _PlaceBlocksArgs.model_validate(raw_input)
         return parsed.model_dump(mode="json")
+    if tool_name == "set_plan":
+        parsed = _SetPlanArgs.model_validate(raw_input)
+        return parsed.model_dump(mode="json")
     if tool_name == "fill_region":
         parsed = _FillRegionArgs.model_validate(raw_input)
         return parsed.model_dump(mode="json")
@@ -1026,3 +1143,38 @@ def _summarize_inspect_area_result(payload: dict[str, Any]) -> str:
         f"filter_terrain={payload.get('filter_terrain')} non_air_blocks={count} "
         f"bbox={bbox} top_blocks={top_blocks}"
     )
+
+
+def _tool_status_message(tool_name: str, raw_input: dict[str, Any]) -> str:
+    if tool_name == "inspect_area":
+        radius = raw_input.get("radius")
+        if isinstance(radius, int):
+            return f"🔍 Inspecting area (r={radius})..."
+        return "🔍 Inspecting area..."
+    if tool_name == "place_blocks":
+        placements = raw_input.get("placements")
+        if isinstance(placements, list):
+            return f"🔨 Placing {len(placements)} blocks..."
+        return "🔨 Placing blocks..."
+    if tool_name == "fill_region":
+        return "🧱 Filling region..."
+    if tool_name == "set_plan":
+        placements = raw_input.get("placements")
+        if isinstance(placements, list):
+            return f"📐 Loading plan ({len(placements)} blocks)..."
+        return "📐 Loading plan..."
+    if tool_name == "undo_last":
+        return "↩ Undoing last change..."
+    if tool_name == "player_position":
+        return "📍 Checking player position..."
+    if tool_name == "player_inventory":
+        return "🎒 Checking inventory..."
+    if tool_name == "get_blueprints":
+        return "📚 Loading blueprints..."
+    if tool_name == "save_blueprint":
+        return "💾 Saving blueprint..."
+    if tool_name == "load_blueprint":
+        return "📂 Loading blueprint..."
+    if tool_name == "modify_overlay":
+        return "🧭 Updating overlay..."
+    return f"⚙ Running {tool_name}..."

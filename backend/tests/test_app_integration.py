@@ -7,8 +7,11 @@ from fastapi.testclient import TestClient
 
 from browsecraft_backend.app import create_app
 from browsecraft_backend.models import (
+    AsyncJobAcceptedResponse,
     ChatAcceptedResponse,
     ChatRequest,
+    ImagineRequest,
+    SearchRequest,
     SessionCreatedResponse,
     SessionListResponse,
     SessionSummary,
@@ -54,14 +57,30 @@ class DummyChatOrchestrator:
         return SessionSwitchedResponse(world_id=world_id, session_id=session_id, status="active")
 
 
+class DummyDemoPipelines:
+    def __init__(self) -> None:
+        self.search_requests: list[SearchRequest] = []
+        self.imagine_requests: list[ImagineRequest] = []
+
+    async def submit_search(self, request: SearchRequest) -> AsyncJobAcceptedResponse:
+        self.search_requests.append(request)
+        return AsyncJobAcceptedResponse(job_id="search-job-1", status="accepted")
+
+    async def submit_imagine(self, request: ImagineRequest) -> AsyncJobAcceptedResponse:
+        self.imagine_requests.append(request)
+        return AsyncJobAcceptedResponse(job_id="imagine-job-1", status="accepted")
+
+
 def test_chat_endpoint_returns_accepted_with_chat_id() -> None:
     def blocked_handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"Unexpected network call: {request.url}")
 
     chat = DummyChatOrchestrator()
+    pipelines = DummyDemoPipelines()
     app = create_app(
         http_client=lambda: httpx.AsyncClient(transport=httpx.MockTransport(blocked_handler)),
         chat_orchestrator=lambda settings, ws_manager: chat,
+        demo_pipelines=lambda settings, ws_manager, chat_orchestrator: pipelines,
     )
 
     with TestClient(app) as client:
@@ -85,9 +104,11 @@ def test_session_endpoints_route_to_chat_orchestrator() -> None:
         raise AssertionError(f"Unexpected network call: {request.url}")
 
     chat = DummyChatOrchestrator()
+    pipelines = DummyDemoPipelines()
     app = create_app(
         http_client=lambda: httpx.AsyncClient(transport=httpx.MockTransport(blocked_handler)),
         chat_orchestrator=lambda settings, ws_manager: chat,
+        demo_pipelines=lambda settings, ws_manager, chat_orchestrator: pipelines,
     )
 
     with TestClient(app) as client:
@@ -135,3 +156,36 @@ def test_session_endpoints_route_to_chat_orchestrator() -> None:
         ("chat-client", "world-1", "session-xyz"),
         ("chat-client", "world-1", "missing"),
     ]
+
+
+def test_search_and_imagine_endpoints_route_to_demo_pipelines() -> None:
+    def blocked_handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"Unexpected network call: {request.url}")
+
+    chat = DummyChatOrchestrator()
+    pipelines = DummyDemoPipelines()
+    app = create_app(
+        http_client=lambda: httpx.AsyncClient(transport=httpx.MockTransport(blocked_handler)),
+        chat_orchestrator=lambda settings, ws_manager: chat,
+        demo_pipelines=lambda settings, ws_manager, chat_orchestrator: pipelines,
+    )
+
+    with TestClient(app) as client:
+        search_response = client.post(
+            "/v1/search",
+            json={"client_id": "chat-client", "query": "medieval castle schematic"},
+        )
+        search_response.raise_for_status()
+        assert search_response.json() == {"job_id": "search-job-1", "status": "accepted"}
+
+        imagine_response = client.post(
+            "/v1/imagine",
+            json={"client_id": "chat-client", "prompt": "dragon statue"},
+        )
+        imagine_response.raise_for_status()
+        assert imagine_response.json() == {"job_id": "imagine-job-1", "status": "accepted"}
+
+    assert pipelines.search_requests[0].client_id == "chat-client"
+    assert pipelines.search_requests[0].query == "medieval castle schematic"
+    assert pipelines.imagine_requests[0].client_id == "chat-client"
+    assert pipelines.imagine_requests[0].prompt == "dragon statue"
