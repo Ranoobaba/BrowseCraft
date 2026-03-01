@@ -2,7 +2,10 @@ package dev.browsecraft.mod;
 
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
+import net.minecraft.client.render.DrawStyle;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.world.debug.gizmo.GizmoDrawing;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,6 +16,7 @@ import java.util.Set;
 
 public final class GhostRenderer {
     private static final float MISSING_MATERIAL_ALPHA_FACTOR = 0.35f;
+    private static final float OUTLINE_LINE_WIDTH = 2.0f;
 
     private final OverlayState overlayState;
     private final Map<String, Integer> colorCache = new HashMap<>();
@@ -48,6 +52,8 @@ public final class GhostRenderer {
             return;
         }
 
+        boolean drawOutlines = placements.size() <= 1500;
+
         BlockPos min = placements.getFirst().pos();
         BlockPos max = placements.getFirst().pos();
         Set<String> missingBlockTypes = new HashSet<>();
@@ -69,10 +75,22 @@ public final class GhostRenderer {
             if (alphaFactor < 1.0f) {
                 missingBlockTypes.add(placement.blockId());
             }
-            applyAlpha(colorForBlock(placement.blockId()), alphaFactor);
+            if (drawOutlines) {
+                int color = applyAlpha(colorForBlock(placement.blockId()), alphaFactor);
+                GizmoDrawing.box(pos, DrawStyle.stroked(color, OUTLINE_LINE_WIDTH));
+            }
         }
 
-        if (placements.size() > 1500) {
+        if (!drawOutlines) {
+            Box bounds = new Box(
+                    min.getX(),
+                    min.getY(),
+                    min.getZ(),
+                    max.getX() + 1.0,
+                    max.getY() + 1.0,
+                    max.getZ() + 1.0
+            );
+            GizmoDrawing.box(bounds, DrawStyle.stroked(0xFF66B3FF, OUTLINE_LINE_WIDTH));
             latestFrameSnapshot = new RenderFrameSnapshot(
                     RenderMode.BOUNDING_BOX,
                     placements.size(),

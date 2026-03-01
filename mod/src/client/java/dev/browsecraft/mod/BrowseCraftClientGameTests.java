@@ -21,7 +21,7 @@ public final class BrowseCraftClientGameTests implements FabricClientGameTest {
             return jsonPath != null
                     && screenshotPath != null
                     && Files.exists(jsonPath)
-                    && Files.exists(screenshotPath);
+                    && hasImageData(screenshotPath);
         }, 300);
 
         Path jsonPath = BrowseCraftClient.latestBuildTestJsonPath();
@@ -35,11 +35,22 @@ public final class BrowseCraftClientGameTests implements FabricClientGameTest {
             if (!json.contains("\"passed\": true")) {
                 throw new AssertionError("validation.passed was not true in artifact JSON");
             }
+            if (Files.size(screenshotPath) == 0) {
+                throw new AssertionError("build-test screenshot is empty");
+            }
         } catch (Exception error) {
             throw new RuntimeException("Failed to read build-test artifact", error);
         }
 
         singleplayer.close();
         context.waitFor(client -> client.getServer() == null, 300);
+    }
+
+    private static boolean hasImageData(Path path) {
+        try {
+            return Files.exists(path) && Files.size(path) > 0;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 }

@@ -15,6 +15,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.BlockItem;
@@ -514,7 +515,13 @@ public final class BrowseCraftClient implements ClientModInitializer {
             }
 
             Files.writeString(jsonPath, GSON.toJson(root));
-            Files.write(screenshotPath, new byte[0]);
+            ScreenshotRecorder.saveScreenshot(
+                    client.runDirectory,
+                    screenshotPath.getFileName().toString(),
+                    client.getFramebuffer(),
+                    1,
+                    message -> {}
+            );
 
             latestBuildTestJsonPath = jsonPath;
             latestBuildTestScreenshotPath = screenshotPath;

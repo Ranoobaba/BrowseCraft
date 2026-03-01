@@ -12,14 +12,18 @@ cd ~/BrowseCraft/mod && gradle build
 
 ## Verify Outputs
 
-The closest thing to a real user test is the in-game `/build-test` command. If you can run `gradle runClientGametest`, check:
+The closest thing to a real user test is the in-game `/build-test` command. Run a clean gametest and check:
 
 ```bash
+cd ~/BrowseCraft/mod && gradle deleteGameTestRunDir runClientGameTest
 cat ~/BrowseCraft/mod/build/run/clientGameTest/browsecraft/build-test/ghost-state.json | jq '{validation, render_status, render_status_observed}'
-find ~/BrowseCraft/mod/build/run/clientGameTest/screenshots -type f | sort | tail -1
+LATEST_SHOT=$(find ~/BrowseCraft/mod/build/run/clientGameTest/screenshots -type f | sort | tail -1)
+echo "$LATEST_SHOT"
+ls -lh "$LATEST_SHOT"
+file "$LATEST_SHOT"
 ```
 
-The screenshot must show ghost block wireframe outlines in front of the player.
+The screenshot must show ghost block wireframe outlines in front of the player and must be non-empty (`size > 0`).
 
 ## E2E Debug Loop
 
@@ -50,7 +54,7 @@ curl -s http://127.0.0.1:8080/health
 ### Ghost block rendering (no API keys needed)
 
 ```bash
-cd ~/BrowseCraft/mod && gradle runClientGameTest
+cd ~/BrowseCraft/mod && gradle deleteGameTestRunDir runClientGameTest
 ```
 
 Artifacts:
@@ -58,9 +62,23 @@ Artifacts:
 - `mod/build/run/clientGameTest/browsecraft/build-test/ghost-state.json` — must have `"passed": true`
 - `mod/build/run/clientGameTest/screenshots/` — must show colored wireframe outlines
 
+Common failure modes:
+
+- `EntrypointException` + `ClassNotFoundException: dev.browsecraft.mod.BrowseCraftClientGameTests`:
+  keep `BrowseCraftClientGameTests` in `mod/src/client/java/dev/browsecraft/mod/` so `runClientGameTest` can load it.
+- `ghost-state.json` says `render_status_observed=true` but screenshot is empty (`0B`):
+  screenshot capture path is broken; treat this as test failure.
+
 ### Live feature testing
 
 Start Minecraft: `cd ~/BrowseCraft/mod && gradle runClient`
+
+If Convex is configured and `/chat` or `/session` fails with `sessions:upsert` / `sessions:listByWorld` not found, run:
+
+```bash
+cd ~/BrowseCraft
+npx convex dev --once
+```
 
 The mod auto-connects to the backend via WebSocket. Test features with curl:
 
@@ -88,6 +106,8 @@ curl -s -X POST http://127.0.0.1:8080/v1/jobs \
 # Poll job status
 curl -s http://127.0.0.1:8080/v1/jobs/<job_id>
 ```
+
+Note: `/chat` responses stream over WebSocket (`chat.delta`/`chat.response`). If the mod is not connected with the same `client_id`, curl alone only confirms request acceptance.
 
 ### What to look at
 
