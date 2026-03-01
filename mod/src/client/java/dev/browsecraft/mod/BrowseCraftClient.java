@@ -12,7 +12,6 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.ScreenshotRecorder;
@@ -82,6 +81,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private boolean hasUndoState;
     private boolean undoClearsOverlay;
     private OverlayState.BlueprintState undoBlueprintState;
+    private List<AbsolutePlacement> undoWorldPlacements;
 
     private KeyBinding openChatKey;
     private KeyBinding rotateKey;
@@ -110,6 +110,9 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private final List<JsonObject> buildTestStatusTimeline = new ArrayList<>();
     private int inventoryPollCountdown;
     private volatile String latestStatusMessage = "";
+    private final List<ChatPanelScreen.ChatMessage> chatHistory = new ArrayList<>();
+    private String activeToolStatus = "";
+    private boolean assistantStreaming;
 
     @Override
     public void onInitializeClient() {
@@ -137,7 +140,28 @@ public final class BrowseCraftClient implements ClientModInitializer {
                 mainExecutor,
                 workerExecutor,
                 statusSink,
-                () -> worldIdResolver.resolve(MinecraftClient.getInstance())
+                () -> worldIdResolver.resolve(MinecraftClient.getInstance()),
+                new BuildCommandController.ChatEventListener() {
+                    @Override
+                    public void onUserMessage(String message) {
+                        handleChatUserMessage(message);
+                    }
+
+                    @Override
+                    public void onAssistantDelta(String delta) {
+                        handleChatAssistantDelta(delta);
+                    }
+
+                    @Override
+                    public void onAssistantMessage(String message) {
+                        handleChatAssistantMessage(message);
+                    }
+
+                    @Override
+                    public void onToolStatus(String status) {
+                        handleToolStatus(status);
+                    }
+                }
         );
 
         registerKeyBindings();
@@ -151,7 +175,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
         this.openChatKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.browsecraft.open_chat",
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_G,
+                GLFW.GLFW_KEY_B,
                 keyCategory
         ));
         this.rotateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -195,10 +219,40 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     }));
 
             dispatcher.register(literal("chat")
+                    .executes(context -> {
+                        openChatPanel(MinecraftClient.getInstance(), "");
+                        return 1;
+                    })
                     .then(argument("message", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String message = StringArgumentType.getString(context, "message");
-                                commandController.submitChat(message);
+                                openChatPanel(MinecraftClient.getInstance(), message);
+                                return 1;
+                            })));
+
+            dispatcher.register(literal("plan")
+                    .then(argument("message", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                String message = StringArgumentType.getString(context, "message");
+                                commandController.submitPlan(message);
+                                return 1;
+                            })));
+
+            dispatcher.register(literal("search")
+                    .then(argument("query", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                String query = StringArgumentType.getString(context, "query");
+                                openChatPanel(MinecraftClient.getInstance(), "");
+                                commandController.submitSearch(query);
+                                return 1;
+                            })));
+
+            dispatcher.register(literal("imagine")
+                    .then(argument("prompt", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                String prompt = StringArgumentType.getString(context, "prompt");
+                                openChatPanel(MinecraftClient.getInstance(), "");
+                                commandController.submitImagine(prompt);
                                 return 1;
                             })));
 
@@ -244,8 +298,12 @@ public final class BrowseCraftClient implements ClientModInitializer {
 
     private void registerClientTick() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (openChatKey.wasPressed()) {
-                client.setScreen(new ChatScreen("/chat ", false));
+            while (openChatKey.wasPressed()) {
+                if (client.currentScreen instanceof ChatPanelScreen) {
+                    client.setScreen(null);
+                } else {
+                    openChatPanel(client, "");
+                }
             }
 
             if (client.player == null || client.world == null) {
@@ -332,6 +390,95 @@ public final class BrowseCraftClient implements ClientModInitializer {
         });
     }
 
+    private void openChatPanel(MinecraftClient client, String prefill) {
+        if (client == null) {
+            return;
+        }
+        client.setScreen(new ChatPanelScreen(
+                this::submitChatFromPanel,
+                this::chatHistorySnapshot,
+                this::toolStatusLabel,
+                prefill
+        ));
+    }
+
+    private void submitChatFromPanel(String message) {
+        if (message.startsWith("/plan ")) {
+            String planPrompt = message.substring("/plan ".length()).trim();
+            if (!planPrompt.isEmpty()) {
+                commandController.submitPlan(planPrompt);
+            }
+            return;
+        }
+        if (message.startsWith("/imagine ")) {
+            String imaginePrompt = message.substring("/imagine ".length()).trim();
+            if (!imaginePrompt.isEmpty()) {
+                commandController.submitImagine(imaginePrompt);
+            }
+            return;
+        }
+        if (message.startsWith("/search ")) {
+            String searchQuery = message.substring("/search ".length()).trim();
+            if (!searchQuery.isEmpty()) {
+                commandController.submitSearch(searchQuery);
+            }
+            return;
+        }
+        commandController.submitChat(message);
+    }
+
+    private List<ChatPanelScreen.ChatMessage> chatHistorySnapshot() {
+        return List.copyOf(chatHistory);
+    }
+
+    private String toolStatusLabel() {
+        if (activeToolStatus.isBlank()) {
+            if (assistantStreaming) {
+                return "thinking...";
+            }
+            return "";
+        }
+        return activeToolStatus;
+    }
+
+    private void handleChatUserMessage(String message) {
+        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.USER, message));
+        assistantStreaming = true;
+    }
+
+    private void handleChatAssistantDelta(String delta) {
+        if (delta.isEmpty()) {
+            return;
+        }
+        int lastIndex = chatHistory.size() - 1;
+        if (lastIndex < 0 || chatHistory.get(lastIndex).role() != ChatPanelScreen.ChatRole.ASSISTANT || !assistantStreaming) {
+            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, delta));
+        } else {
+            ChatPanelScreen.ChatMessage last = chatHistory.get(lastIndex);
+            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(last.role(), last.text() + delta));
+        }
+        assistantStreaming = true;
+    }
+
+    private void handleChatAssistantMessage(String message) {
+        int lastIndex = chatHistory.size() - 1;
+        if (lastIndex >= 0 && chatHistory.get(lastIndex).role() == ChatPanelScreen.ChatRole.ASSISTANT) {
+            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
+        } else {
+            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
+        }
+        assistantStreaming = false;
+        activeToolStatus = "";
+    }
+
+    private void handleToolStatus(String status) {
+        activeToolStatus = status;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null && client.currentScreen instanceof ChatPanelScreen) {
+            client.player.sendMessage(Text.literal(status), true);
+        }
+    }
+
     private void runBuildTestCommand(MinecraftClient client) {
         if (client.player == null) {
             return;
@@ -367,6 +514,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
             hasUndoState = false;
             undoClearsOverlay = false;
             undoBlueprintState = null;
+            undoWorldPlacements = null;
         }
 
         commandController.submitChat(message);
@@ -687,7 +835,8 @@ public final class BrowseCraftClient implements ClientModInitializer {
                 case "inspect_area" -> toolInspectArea(client, params);
                 case "place_blocks" -> toolPlaceBlocks(client, params);
                 case "fill_region" -> toolFillRegion(client, params);
-                case "undo_last" -> toolUndoLast();
+                case "set_plan" -> toolSetPlan(client, params);
+                case "undo_last" -> toolUndoLast(client);
                 case "get_active_overlay" -> activeOverlaySummary(overlayState.snapshot());
                 case "modify_overlay" -> toolModifyOverlay(params);
                 case "get_blueprints" -> toolGetBlueprints(client);
@@ -844,7 +993,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
             absolutePlacements.add(new AbsolutePlacement(x, y, z, blockId));
         }
 
-        return applyAbsolutePlacements(absolutePlacements);
+        return applyAbsolutePlacements(client, absolutePlacements);
     }
 
     private JsonObject toolFillRegion(MinecraftClient client, JsonObject params) {
@@ -864,99 +1013,150 @@ public final class BrowseCraftClient implements ClientModInitializer {
             throw new IllegalArgumentException("fill_region volume must be <= 4096 blocks");
         }
 
-        List<AbsolutePlacement> absolutePlacements = new ArrayList<>((int) volume);
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    absolutePlacements.add(new AbsolutePlacement(x, y, z, blockId));
-                }
-            }
-        }
-
-        JsonObject result = applyAbsolutePlacements(absolutePlacements);
+        JsonObject result = applyFilledRegion(client, minX, minY, minZ, maxX, maxY, maxZ, blockId);
         result.addProperty("fill_region", true);
         result.add("from_corner", blockPosToJson(fromCorner));
         result.add("to_corner", blockPosToJson(toCorner));
         return result;
     }
 
-    private JsonObject applyAbsolutePlacements(List<AbsolutePlacement> absolutePlacements) {
-        if (absolutePlacements.isEmpty()) {
+    private JsonObject toolSetPlan(MinecraftClient client, JsonObject params) {
+        JsonElement placementsElement = params.get("placements");
+        if (placementsElement == null || !placementsElement.isJsonArray()) {
+            throw new IllegalArgumentException("Expected array field: placements");
+        }
+        JsonArray placementsJson = placementsElement.getAsJsonArray();
+        if (placementsJson.isEmpty()) {
             throw new IllegalArgumentException("placements must contain at least one block");
         }
 
-        List<AbsolutePlacement> effectivePlacements = absolutePlacements;
+        List<BuildPlacement> relativePlacements = new ArrayList<>(placementsJson.size());
+        for (JsonElement element : placementsJson) {
+            if (!element.isJsonObject()) {
+                throw new IllegalArgumentException("placements must contain objects");
+            }
+            JsonObject placementJson = element.getAsJsonObject();
+            relativePlacements.add(new BuildPlacement(
+                    requiredInt(placementJson, "dx"),
+                    requiredInt(placementJson, "dy"),
+                    requiredInt(placementJson, "dz"),
+                    normalizeBlockId(requiredString(placementJson, "block_id")),
+                    Map.of()
+            ));
+        }
+
+        overlayState.setPlan(new BuildPlan(relativePlacements.size(), List.copyOf(relativePlacements)));
+        if (client.player != null) {
+            overlayState.applyInitialPreviewAnchor(client.player.getBlockPos().offset(client.player.getHorizontalFacing()));
+        }
+        overlayPlacementRevision++;
+
+        JsonObject result = new JsonObject();
+        result.addProperty("loaded_count", relativePlacements.size());
+        result.add("overlay", activeOverlaySummary(overlayState.snapshot()));
+        return result;
+    }
+
+    private JsonObject applyAbsolutePlacements(MinecraftClient client, List<AbsolutePlacement> absolutePlacements) {
+        if (absolutePlacements.isEmpty()) {
+            throw new IllegalArgumentException("placements must contain at least one block");
+        }
+        if (client.player == null || client.world == null || client.getNetworkHandler() == null) {
+            throw new IllegalStateException("place_blocks requires an active player, world, and network handler");
+        }
+
         if (overlayState.hasPlan()) {
-            effectivePlacements = mergeWithExistingOverlay(absolutePlacements);
+            overlayState.cancel();
+        }
+        Map<BlockPos, String> targetByPos = new LinkedHashMap<>();
+        for (AbsolutePlacement placement : absolutePlacements) {
+            targetByPos.put(new BlockPos(placement.x(), placement.y(), placement.z()), placement.blockId());
         }
 
         int anchorX = Integer.MAX_VALUE;
         int anchorY = Integer.MAX_VALUE;
         int anchorZ = Integer.MAX_VALUE;
-        for (AbsolutePlacement placement : effectivePlacements) {
-            anchorX = Math.min(anchorX, placement.x());
-            anchorY = Math.min(anchorY, placement.y());
-            anchorZ = Math.min(anchorZ, placement.z());
+        List<AbsolutePlacement> previousPlacements = new ArrayList<>(targetByPos.size());
+        for (Map.Entry<BlockPos, String> entry : targetByPos.entrySet()) {
+            BlockPos pos = entry.getKey();
+            String previousBlockId = Registries.BLOCK.getId(client.world.getBlockState(pos).getBlock()).toString();
+            previousPlacements.add(new AbsolutePlacement(pos.getX(), pos.getY(), pos.getZ(), previousBlockId));
+            sendCommand(client, "setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + entry.getValue() + " replace");
+            anchorX = Math.min(anchorX, pos.getX());
+            anchorY = Math.min(anchorY, pos.getY());
+            anchorZ = Math.min(anchorZ, pos.getZ());
         }
 
-        if (overlayState.hasPlan()) {
-            undoBlueprintState = overlayState.blueprintState();
-            undoClearsOverlay = false;
-        } else {
-            undoBlueprintState = null;
-            undoClearsOverlay = true;
-        }
+        undoWorldPlacements = previousPlacements;
+        undoBlueprintState = null;
+        undoClearsOverlay = false;
         hasUndoState = true;
-
-        List<BuildPlacement> relativePlacements = new ArrayList<>(effectivePlacements.size());
-        for (AbsolutePlacement placement : effectivePlacements) {
-            relativePlacements.add(new BuildPlacement(
-                    placement.x() - anchorX,
-                    placement.y() - anchorY,
-                    placement.z() - anchorZ,
-                    placement.blockId(),
-                    Map.of()
-            ));
-        }
-
-        BuildPlan plan = new BuildPlan(relativePlacements.size(), List.copyOf(relativePlacements));
-        BlockPos anchor = new BlockPos(anchorX, anchorY, anchorZ);
-        overlayState.setPlan(plan);
-        overlayState.setAnchor(anchor);
-        overlayState.confirm();
         overlayPlacementRevision++;
+        BlockPos anchor = new BlockPos(anchorX, anchorY, anchorZ);
 
         JsonObject result = new JsonObject();
-        result.addProperty("placed_count", relativePlacements.size());
+        result.addProperty("placed_count", targetByPos.size());
         result.add("anchor", blockPosToJson(anchor));
-        result.add("overlay", activeOverlaySummary(overlayState.snapshot()));
         return result;
     }
 
-    private List<AbsolutePlacement> mergeWithExistingOverlay(List<AbsolutePlacement> incomingPlacements) {
-        OverlaySnapshot snapshot = overlayState.snapshot();
-        Map<BlockPos, String> mergedByPos = new LinkedHashMap<>();
-        for (OverlayState.TransformedPlacement transformed : snapshot.transformedPlacements()) {
-            mergedByPos.put(transformed.pos(), transformed.blockId());
-        }
-        for (AbsolutePlacement placement : incomingPlacements) {
-            mergedByPos.put(new BlockPos(placement.x(), placement.y(), placement.z()), placement.blockId());
+    private JsonObject applyFilledRegion(
+            MinecraftClient client,
+            int minX,
+            int minY,
+            int minZ,
+            int maxX,
+            int maxY,
+            int maxZ,
+            String blockId
+    ) {
+        if (client.player == null || client.world == null || client.getNetworkHandler() == null) {
+            throw new IllegalStateException("fill_region requires an active player, world, and network handler");
         }
 
-        List<AbsolutePlacement> merged = new ArrayList<>(mergedByPos.size());
-        for (Map.Entry<BlockPos, String> entry : mergedByPos.entrySet()) {
-            BlockPos pos = entry.getKey();
-            merged.add(new AbsolutePlacement(pos.getX(), pos.getY(), pos.getZ(), entry.getValue()));
+        if (overlayState.hasPlan()) {
+            overlayState.cancel();
         }
-        return merged;
+
+        List<AbsolutePlacement> previousPlacements = new ArrayList<>((maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1));
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    String previousBlockId = Registries.BLOCK.getId(client.world.getBlockState(pos).getBlock()).toString();
+                    previousPlacements.add(new AbsolutePlacement(x, y, z, previousBlockId));
+                }
+            }
+        }
+
+        sendCommand(client, "fill " + minX + " " + minY + " " + minZ + " " + maxX + " " + maxY + " " + maxZ + " " + blockId + " replace");
+        undoWorldPlacements = previousPlacements;
+        undoBlueprintState = null;
+        undoClearsOverlay = false;
+        hasUndoState = true;
+        overlayPlacementRevision++;
+
+        JsonObject result = new JsonObject();
+        int placedCount = previousPlacements.size();
+        result.addProperty("placed_count", placedCount);
+        result.add("anchor", blockPosToJson(new BlockPos(minX, minY, minZ)));
+        return result;
     }
 
-    private JsonObject toolUndoLast() {
+    private JsonObject toolUndoLast(MinecraftClient client) {
         if (!hasUndoState) {
             throw new IllegalStateException("No placement batch to undo");
         }
 
-        if (undoClearsOverlay) {
+        if (undoWorldPlacements != null) {
+            if (client.player == null || client.getNetworkHandler() == null) {
+                throw new IllegalStateException("undo_last requires an active player and network handler");
+            }
+            for (AbsolutePlacement placement : undoWorldPlacements) {
+                sendCommand(client, "setblock " + placement.x() + " " + placement.y() + " " + placement.z() + " " + placement.blockId() + " replace");
+            }
+            undoWorldPlacements = null;
+        } else if (undoClearsOverlay) {
             overlayState.cancel();
         } else {
             overlayState.loadBlueprint(undoBlueprintState);
@@ -970,6 +1170,13 @@ public final class BrowseCraftClient implements ClientModInitializer {
         result.addProperty("undone", true);
         result.add("overlay", activeOverlaySummary(overlayState.snapshot()));
         return result;
+    }
+
+    private void sendCommand(MinecraftClient client, String command) {
+        if (client.getNetworkHandler() == null) {
+            throw new IllegalStateException("Cannot send command without network handler");
+        }
+        client.getNetworkHandler().sendChatCommand(command);
     }
 
     private JsonObject toolModifyOverlay(JsonObject params) {

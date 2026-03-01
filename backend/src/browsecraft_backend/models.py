@@ -77,6 +77,7 @@ class BuildPlan(BaseModel):
 class ChatRequest(BaseModel):
     client_id: str = Field(min_length=1)
     message: str = Field(min_length=1)
+    mode: Literal["build", "plan", "plan_fast"] = "build"
     world_id: str | None = Field(default=None, min_length=1)
     session_id: str | None = Field(default=None, min_length=1)
 
@@ -84,6 +85,21 @@ class ChatRequest(BaseModel):
 class ChatAcceptedResponse(BaseModel):
     chat_id: str
     status: Literal["accepted"]
+
+
+class AsyncJobAcceptedResponse(BaseModel):
+    job_id: str
+    status: Literal["accepted"]
+
+
+class SearchRequest(BaseModel):
+    client_id: str = Field(min_length=1)
+    query: str = Field(min_length=1)
+
+
+class ImagineRequest(BaseModel):
+    client_id: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
 
 
 class SessionNewRequest(BaseModel):

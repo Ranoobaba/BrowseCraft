@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -63,6 +66,7 @@ class WebSocketManager:
             "tool": tool_name,
             "params": params,
         }
+        logger.info("tool.request client=%s tool=%s request_id=%s", client_id, tool_name, request_id)
         try:
             await websocket.send_json(request_payload)
         except Exception:
@@ -79,12 +83,14 @@ class WebSocketManager:
                 self._pending_tool_requests.pop(request_id, None)
 
         if "error" in response_payload:
+            logger.info("tool.response client=%s tool=%s request_id=%s status=error", client_id, tool_name, request_id)
             raise RuntimeError(str(response_payload["error"]))
         if "result" not in response_payload:
             raise RuntimeError("Tool response missing result payload")
         result = response_payload["result"]
         if not isinstance(result, dict):
             raise RuntimeError("Tool response result must be a JSON object")
+        logger.info("tool.response client=%s tool=%s request_id=%s status=ok", client_id, tool_name, request_id)
         return result
 
     async def handle_incoming_message(self, client_id: str, message: dict[str, Any]) -> bool:
