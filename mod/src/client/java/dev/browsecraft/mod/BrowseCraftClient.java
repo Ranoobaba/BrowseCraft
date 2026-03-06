@@ -8,9 +8,13 @@ import com.google.gson.JsonObject;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.block.BlockState;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -20,12 +24,15 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
+import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWCharCallbackI;
+import org.lwjgl.glfw.GLFWKeyCallbackI;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -52,6 +59,16 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int CHAT_BUILD_TEST_TIMEOUT_TICKS = 20 * 90;
     private static final int CHAT_BUILD_TEST_SETTLE_TICKS = 20;
+    private static final int HUD_TEST_SETTLE_TICKS = 4;
+    private static final int HUD_MARGIN = 10;
+    private static final int HUD_PANEL_WIDTH = 340;
+    private static final int HUD_PANEL_HEIGHT = 210;
+    private static final int HUD_HEADER_HEIGHT = 20;
+    private static final int HUD_INPUT_HEIGHT = 24;
+    private static final int HUD_INSET = 7;
+    private static final Identifier HUD_LAYER_ID = Identifier.of("browsecraft", "hud_panel");
+    private static final String HUD_TEST_ON_STARTUP_PROPERTY = "browsecraft.hudTestOnStartup";
+    private static final String HUD_TEST_EXIT_ON_COMPLETE_PROPERTY = "browsecraft.hudTestExitOnComplete";
     private static final Set<String> TERRAIN_BLOCK_IDS = Set.of(
             "minecraft:grass_block",
             "minecraft:dirt",
@@ -70,6 +87,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
 
     public static volatile Path latestBuildTestJsonPath;
     public static volatile Path latestBuildTestScreenshotPath;
+    public static volatile Path latestHudTestJsonPath;
 
     private OverlayState overlayState;
     private GhostRenderer ghostRenderer;
@@ -110,9 +128,30 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private final List<JsonObject> buildTestStatusTimeline = new ArrayList<>();
     private int inventoryPollCountdown;
     private volatile String latestStatusMessage = "";
-    private final List<ChatPanelScreen.ChatMessage> chatHistory = new ArrayList<>();
+    private final HudChatState hudChatState = new HudChatState();
+    private GLFWKeyCallbackI previousKeyCallback;
+    private GLFWCharCallbackI previousCharCallback;
+    private final List<ChatMessage> chatHistory = new ArrayList<>();
     private String activeToolStatus = "";
     private boolean assistantStreaming;
+    private HudCaptureSession hudCaptureSession;
+    private HudRenderSnapshot latestHudRenderSnapshot = new HudRenderSnapshot(
+            HudChatState.Mode.HIDDEN,
+            false,
+            0,
+            0,
+            "",
+            "",
+            false,
+            null,
+            null,
+            List.of(),
+            0,
+            "",
+            0,
+            0
+    );
+    private boolean hudTestStartupTriggered;
 
     @Override
     public void onInitializeClient() {
@@ -165,8 +204,10 @@ public final class BrowseCraftClient implements ClientModInitializer {
         );
 
         registerKeyBindings();
+        registerHudInputCallbacks();
         registerCommands();
         registerClientTick();
+        registerHudRenderer();
         ghostRenderer.register();
     }
 
@@ -218,15 +259,21 @@ public final class BrowseCraftClient implements ClientModInitializer {
                         return 1;
                     }));
 
+            dispatcher.register(literal("hud-test")
+                    .executes(context -> {
+                        runHudTestCommand(MinecraftClient.getInstance());
+                        return 1;
+                    }));
+
             dispatcher.register(literal("chat")
                     .executes(context -> {
-                        openChatPanel(MinecraftClient.getInstance(), "");
+                        openHudInput("");
                         return 1;
                     })
                     .then(argument("message", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String message = StringArgumentType.getString(context, "message");
-                                openChatPanel(MinecraftClient.getInstance(), message);
+                                openHudInput(message);
                                 return 1;
                             })));
 
@@ -242,7 +289,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     .then(argument("query", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String query = StringArgumentType.getString(context, "query");
-                                openChatPanel(MinecraftClient.getInstance(), "");
+                                hudChatState.ensureHudVisible();
                                 commandController.submitSearch(query);
                                 return 1;
                             })));
@@ -251,7 +298,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     .then(argument("prompt", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String prompt = StringArgumentType.getString(context, "prompt");
-                                openChatPanel(MinecraftClient.getInstance(), "");
+                                hudChatState.ensureHudVisible();
                                 commandController.submitImagine(prompt);
                                 return 1;
                             })));
@@ -299,16 +346,21 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private void registerClientTick() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openChatKey.wasPressed()) {
-                if (client.currentScreen instanceof ChatPanelScreen) {
-                    client.setScreen(null);
-                } else {
-                    openChatPanel(client, "");
-                }
+                hudChatState.cycleMode();
             }
 
             if (client.player == null || client.world == null) {
                 ghostRenderer.setAvailableBlockTypes(Set.of());
                 return;
+            }
+
+            if (!hudTestStartupTriggered && Boolean.getBoolean(HUD_TEST_ON_STARTUP_PROPERTY)) {
+                hudTestStartupTriggered = true;
+                runHudTestCommand(client);
+            }
+
+            if (hudCaptureSession != null) {
+                tickHudCaptureSession(client);
             }
 
             if (inventoryPollCountdown <= 0) {
@@ -390,19 +442,19 @@ public final class BrowseCraftClient implements ClientModInitializer {
         });
     }
 
-    private void openChatPanel(MinecraftClient client, String prefill) {
-        if (client == null) {
-            return;
-        }
-        client.setScreen(new ChatPanelScreen(
-                this::submitChatFromPanel,
-                this::chatHistorySnapshot,
-                this::toolStatusLabel,
-                prefill
-        ));
+    private void registerHudRenderer() {
+        HudElementRegistry.attachElementBefore(
+                VanillaHudElements.CHAT,
+                HUD_LAYER_ID,
+                (drawContext, tickCounter) -> renderHud(drawContext)
+        );
     }
 
-    private void submitChatFromPanel(String message) {
+    private void openHudInput(String prefill) {
+        hudChatState.openInput(prefill);
+    }
+
+    private void submitChatFromHud(String message) {
         if (message.startsWith("/plan ")) {
             String planPrompt = message.substring("/plan ".length()).trim();
             if (!planPrompt.isEmpty()) {
@@ -427,11 +479,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
         commandController.submitChat(message);
     }
 
-    private List<ChatPanelScreen.ChatMessage> chatHistorySnapshot() {
-        return List.copyOf(chatHistory);
-    }
-
-    private String toolStatusLabel() {
+    private String hudStatusLabel() {
         if (activeToolStatus.isBlank()) {
             if (assistantStreaming) {
                 return "thinking...";
@@ -441,8 +489,223 @@ public final class BrowseCraftClient implements ClientModInitializer {
         return activeToolStatus;
     }
 
+    private void registerHudInputCallbacks() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        client.execute(() -> {
+            long windowHandle = client.getWindow().getHandle();
+            previousKeyCallback = GLFW.glfwSetKeyCallback(windowHandle, (window, key, scancode, action, mods) -> {
+                if (HudInputCapture.shouldConsumeKey(hudChatState.mode(), client.currentScreen != null, action)) {
+                    client.execute(() -> onHudKeyInput(client, key, action));
+                    return;
+                }
+                GLFWKeyCallbackI chained = previousKeyCallback;
+                if (chained != null) {
+                    chained.invoke(window, key, scancode, action, mods);
+                }
+            });
+            previousCharCallback = GLFW.glfwSetCharCallback(windowHandle, (window, codepoint) -> {
+                if (HudInputCapture.shouldConsumeChar(hudChatState.mode(), client.currentScreen != null, codepoint)) {
+                    client.execute(() -> onHudCharInput(client, codepoint));
+                    return;
+                }
+                GLFWCharCallbackI chained = previousCharCallback;
+                if (chained != null) {
+                    chained.invoke(window, codepoint);
+                }
+            });
+        });
+    }
+
+    private void onHudKeyInput(MinecraftClient client, int key, int action) {
+        if (hudChatState.mode() != HudChatState.Mode.INPUT) {
+            return;
+        }
+        if (client.currentScreen != null) {
+            return;
+        }
+        if (action != GLFW.GLFW_PRESS && action != GLFW.GLFW_REPEAT) {
+            return;
+        }
+
+        switch (key) {
+            case GLFW.GLFW_KEY_ESCAPE -> hudChatState.cancelInput();
+            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
+                String message = hudChatState.submit();
+                if (!message.isEmpty()) {
+                    submitChatFromHud(message);
+                }
+            }
+            case GLFW.GLFW_KEY_BACKSPACE -> hudChatState.backspace();
+            case GLFW.GLFW_KEY_LEFT -> hudChatState.moveLeft();
+            case GLFW.GLFW_KEY_RIGHT -> hudChatState.moveRight();
+            default -> {
+            }
+        }
+    }
+
+    private void onHudCharInput(MinecraftClient client, int codepoint) {
+        if (hudChatState.mode() != HudChatState.Mode.INPUT) {
+            return;
+        }
+        if (client.currentScreen != null) {
+            return;
+        }
+        if (!Character.isValidCodePoint(codepoint) || Character.isISOControl(codepoint)) {
+            return;
+        }
+        hudChatState.insert((char) codepoint);
+    }
+
+    private HudRenderSnapshot buildHudRenderSnapshot(MinecraftClient client) {
+        int screenWidth = client.getWindow().getScaledWidth();
+        int screenHeight = client.getWindow().getScaledHeight();
+        String status = hudStatusLabel();
+        String header = status.isBlank() ? "BrowseCraft" : status;
+        if (client.options.hudHidden || hudChatState.mode() == HudChatState.Mode.HIDDEN) {
+            return new HudRenderSnapshot(
+                    hudChatState.mode(),
+                    false,
+                    screenWidth,
+                    screenHeight,
+                    header,
+                    activeToolStatus,
+                    assistantStreaming,
+                    null,
+                    null,
+                    List.of(),
+                    0,
+                    hudChatState.inputText(),
+                    hudChatState.cursor(),
+                    0
+            );
+        }
+
+        int panelWidth = Math.min(HUD_PANEL_WIDTH, screenWidth - (HUD_MARGIN * 2));
+        int inputOffset = hudChatState.mode() == HudChatState.Mode.INPUT ? HUD_INPUT_HEIGHT + HUD_MARGIN : 0;
+        int maxPanelHeight = screenHeight - (HUD_MARGIN * 2) - inputOffset;
+        int panelHeight = Math.min(HUD_PANEL_HEIGHT, Math.max(80, maxPanelHeight));
+        int left = screenWidth - panelWidth - HUD_MARGIN;
+        int top = HUD_MARGIN;
+        int right = left + panelWidth;
+        int bottom = top + panelHeight;
+        int textWidth = panelWidth - (HUD_INSET * 2);
+        int messagesTop = top + HUD_HEADER_HEIGHT;
+        int messagesBottom = bottom - HUD_INSET;
+        List<RenderedLine> lines = buildRenderedLines(chatHistory, client.textRenderer, textWidth);
+        int lineHeight = client.textRenderer.fontHeight + 2;
+        int maxVisible = Math.max(1, (messagesBottom - messagesTop) / lineHeight);
+        int visibleStartIndex = Math.max(0, lines.size() - maxVisible);
+        HudBounds panelBounds = new HudBounds(left, top, right, bottom);
+        HudBounds inputBounds = null;
+        int cursorX = 0;
+
+        if (hudChatState.mode() == HudChatState.Mode.INPUT) {
+            inputBounds = inputBarBounds(screenWidth, screenHeight);
+            int cursorIndex = Math.max(0, Math.min(hudChatState.cursor(), hudChatState.inputText().length()));
+            cursorX = inputBounds.left() + HUD_INSET
+                    + client.textRenderer.getWidth("> " + hudChatState.inputText().substring(0, cursorIndex));
+        }
+
+        return new HudRenderSnapshot(
+                hudChatState.mode(),
+                true,
+                screenWidth,
+                screenHeight,
+                header,
+                activeToolStatus,
+                assistantStreaming,
+                panelBounds,
+                inputBounds,
+                lines,
+                visibleStartIndex,
+                hudChatState.inputText(),
+                hudChatState.cursor(),
+                cursorX
+        );
+    }
+
+    private void renderHud(DrawContext context) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        HudRenderSnapshot snapshot = buildHudRenderSnapshot(client);
+        latestHudRenderSnapshot = snapshot;
+        if (!snapshot.visible()) {
+            return;
+        }
+
+        HudBounds panelBounds = snapshot.panelBounds();
+        int lineHeight = client.textRenderer.fontHeight + 2;
+        int messagesTop = panelBounds.top() + HUD_HEADER_HEIGHT;
+        int y = messagesTop;
+        context.fill(panelBounds.left(), panelBounds.top(), panelBounds.right(), panelBounds.bottom(), 0xB0101010);
+        context.drawText(client.textRenderer, snapshot.header(), panelBounds.left() + HUD_INSET, panelBounds.top() + 6, 0xFFE8E8A0, false);
+
+        for (int index = snapshot.visibleStartIndex(); index < snapshot.wrappedLines().size(); index++) {
+            RenderedLine line = snapshot.wrappedLines().get(index);
+            context.drawText(client.textRenderer, line.orderedText(), panelBounds.left() + HUD_INSET, y, line.color(), false);
+            y += lineHeight;
+        }
+
+        if (hudChatState.mode() == HudChatState.Mode.INPUT) {
+            renderInputBar(context, client.textRenderer, snapshot);
+        }
+    }
+
+    private void renderInputBar(DrawContext context, TextRenderer textRenderer, HudRenderSnapshot snapshot) {
+        HudBounds inputBounds = snapshot.inputBounds();
+        context.fill(inputBounds.left(), inputBounds.top(), inputBounds.right(), inputBounds.bottom(), 0xC0202020);
+        String prompt = "> " + snapshot.inputText();
+        context.drawText(textRenderer, prompt, inputBounds.left() + HUD_INSET, inputBounds.top() + 8, 0xFFFFFFFF, false);
+
+        if ((System.currentTimeMillis() / 500) % 2 == 0) {
+            context.fill(
+                    snapshot.cursorX(),
+                    inputBounds.top() + 6,
+                    snapshot.cursorX() + 1,
+                    inputBounds.bottom() - 6,
+                    0xFFFFFFFF
+            );
+        }
+    }
+
+    private static List<RenderedLine> buildRenderedLines(List<ChatMessage> messages, TextRenderer textRenderer, int width) {
+        List<RenderedLine> lines = new ArrayList<>();
+        for (ChatMessage message : messages) {
+            int color = message.role() == ChatRole.USER ? 0xFF7FD7FF : 0xFFF0F0F0;
+            String prefix = message.role() == ChatRole.USER ? "You: " : "AI: ";
+            Text text = Text.literal(prefix + message.text());
+            List<OrderedText> wrapped = textRenderer.wrapLines(text, width);
+            if (wrapped.isEmpty()) {
+                OrderedText emptyLine = Text.literal(prefix).asOrderedText();
+                lines.add(new RenderedLine(orderedTextToString(emptyLine), emptyLine, color));
+                continue;
+            }
+            for (OrderedText wrappedLine : wrapped) {
+                lines.add(new RenderedLine(orderedTextToString(wrappedLine), wrappedLine, color));
+            }
+        }
+        return lines;
+    }
+
+    private static HudBounds inputBarBounds(int screenWidth, int screenHeight) {
+        int left = HUD_MARGIN;
+        int right = screenWidth - HUD_MARGIN;
+        int bottom = screenHeight - HUD_MARGIN;
+        int top = bottom - HUD_INPUT_HEIGHT;
+        return new HudBounds(left, top, right, bottom);
+    }
+
+    private static String orderedTextToString(OrderedText text) {
+        StringBuilder builder = new StringBuilder();
+        text.accept((index, style, codePoint) -> {
+            builder.appendCodePoint(codePoint);
+            return true;
+        });
+        return builder.toString();
+    }
+
     private void handleChatUserMessage(String message) {
-        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.USER, message));
+        hudChatState.ensureHudVisible();
+        chatHistory.add(new ChatMessage(ChatRole.USER, message));
         assistantStreaming = true;
     }
 
@@ -451,32 +714,31 @@ public final class BrowseCraftClient implements ClientModInitializer {
             return;
         }
         int lastIndex = chatHistory.size() - 1;
-        if (lastIndex < 0 || chatHistory.get(lastIndex).role() != ChatPanelScreen.ChatRole.ASSISTANT || !assistantStreaming) {
-            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, delta));
+        if (lastIndex < 0 || chatHistory.get(lastIndex).role() != ChatRole.ASSISTANT || !assistantStreaming) {
+            chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, delta));
         } else {
-            ChatPanelScreen.ChatMessage last = chatHistory.get(lastIndex);
-            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(last.role(), last.text() + delta));
+            ChatMessage last = chatHistory.get(lastIndex);
+            chatHistory.set(lastIndex, new ChatMessage(last.role(), last.text() + delta));
         }
+        hudChatState.ensureHudVisible();
         assistantStreaming = true;
     }
 
     private void handleChatAssistantMessage(String message) {
         int lastIndex = chatHistory.size() - 1;
-        if (lastIndex >= 0 && chatHistory.get(lastIndex).role() == ChatPanelScreen.ChatRole.ASSISTANT) {
-            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
+        if (lastIndex >= 0 && chatHistory.get(lastIndex).role() == ChatRole.ASSISTANT) {
+            chatHistory.set(lastIndex, new ChatMessage(ChatRole.ASSISTANT, message));
         } else {
-            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
+            chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, message));
         }
+        hudChatState.ensureHudVisible();
         assistantStreaming = false;
         activeToolStatus = "";
     }
 
     private void handleToolStatus(String status) {
         activeToolStatus = status;
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null && client.currentScreen instanceof ChatPanelScreen) {
-            client.player.sendMessage(Text.literal(status), true);
-        }
+        hudChatState.ensureHudVisible();
     }
 
     private void runBuildTestCommand(MinecraftClient client) {
@@ -493,6 +755,66 @@ public final class BrowseCraftClient implements ClientModInitializer {
         overlayState.setRotationQuarterTurns(rotationForFacing(client.player.getHorizontalFacing()));
         buildTestCaptureTicksRemaining = 5;
         client.player.sendMessage(Text.literal("Loaded /build-test plan"), true);
+    }
+
+    private void runHudTestCommand(MinecraftClient client) {
+        if (client.player == null) {
+            return;
+        }
+
+        if (hudCaptureSession != null) {
+            restoreHudDebugState(hudCaptureSession.previousState);
+        }
+
+        latestHudTestJsonPath = null;
+        HudDebugState previousState = snapshotHudDebugState();
+        hudCaptureSession = new HudCaptureSession(
+                Instant.now().toEpochMilli(),
+                previousState,
+                List.of(
+                        new HudCaptureTarget(HudChatState.Mode.HIDDEN, "hidden"),
+                        new HudCaptureTarget(HudChatState.Mode.HUD, "hud"),
+                        new HudCaptureTarget(HudChatState.Mode.INPUT, "input")
+                )
+        );
+        prepareHudCaptureState(hudCaptureSession.currentTarget());
+        hudCaptureSession.settleTicksRemaining = HUD_TEST_SETTLE_TICKS;
+        client.player.sendMessage(Text.literal("Running /hud-test captures"), true);
+    }
+
+    private HudDebugState snapshotHudDebugState() {
+        return new HudDebugState(
+                List.copyOf(chatHistory),
+                activeToolStatus,
+                assistantStreaming,
+                hudChatState.snapshot()
+        );
+    }
+
+    private void restoreHudDebugState(HudDebugState state) {
+        chatHistory.clear();
+        chatHistory.addAll(state.chatHistory());
+        activeToolStatus = state.activeToolStatus();
+        assistantStreaming = state.assistantStreaming();
+        hudChatState.restore(state.hudState());
+    }
+
+    private void prepareHudCaptureState(HudCaptureTarget target) {
+        chatHistory.clear();
+        chatHistory.add(new ChatMessage(ChatRole.USER, "build a lantern arch over the path"));
+        chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, "Placing the main arch supports with spruce logs."));
+        chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, "Next step: hang lanterns under the center span."));
+        activeToolStatus = "Step 2/3: placing supports...";
+        assistantStreaming = false;
+
+        switch (target.mode()) {
+            case HIDDEN -> hudChatState.restore(new HudChatState.Snapshot(HudChatState.Mode.HIDDEN, "", 0));
+            case HUD -> hudChatState.restore(new HudChatState.Snapshot(HudChatState.Mode.HUD, "", 0));
+            case INPUT -> {
+                String input = "/chat add lanterns to the arch";
+                hudChatState.restore(new HudChatState.Snapshot(HudChatState.Mode.INPUT, input, input.length()));
+            }
+        }
     }
 
     private void runChatBuildTestCommand(MinecraftClient client, String message, boolean resetOverlay) {
@@ -702,6 +1024,134 @@ public final class BrowseCraftClient implements ClientModInitializer {
         };
     }
 
+    private void tickHudCaptureSession(MinecraftClient client) {
+        HudCaptureSession session = hudCaptureSession;
+        if (session == null) {
+            return;
+        }
+        if (session.settleTicksRemaining > 0) {
+            session.settleTicksRemaining--;
+            return;
+        }
+
+        try {
+            captureHudTestArtifact(client, session, session.currentTarget());
+            session.captureIndex++;
+            if (session.captureIndex >= session.targets.size()) {
+                Path manifestPath = writeHudTestManifest(client, session);
+                latestHudTestJsonPath = manifestPath;
+                restoreHudDebugState(session.previousState);
+                hudCaptureSession = null;
+                if (client.player != null) {
+                    client.player.sendMessage(Text.literal("Saved /hud-test artifacts to " + manifestPath), true);
+                }
+                if (Boolean.getBoolean(HUD_TEST_EXIT_ON_COMPLETE_PROPERTY)) {
+                    client.scheduleStop();
+                }
+                return;
+            }
+
+            prepareHudCaptureState(session.currentTarget());
+            session.settleTicksRemaining = HUD_TEST_SETTLE_TICKS;
+        } catch (IOException error) {
+            throw new RuntimeException("Failed to capture /hud-test artifacts", error);
+        }
+    }
+
+    private void captureHudTestArtifact(MinecraftClient client, HudCaptureSession session, HudCaptureTarget target) throws IOException {
+        long capturedAtMillis = System.currentTimeMillis();
+        Path runDir = client.runDirectory.toPath();
+        Path hudTestDir = runDir.resolve("browsecraft").resolve("hud-test");
+        Files.createDirectories(hudTestDir);
+        String screenshotName = "browsecraft-hud-test-" + session.sessionTimestamp + "-" + target.label() + ".png";
+        Path screenshotPath = runDir.resolve("screenshots").resolve(screenshotName).toAbsolutePath();
+
+        ScreenshotRecorder.saveScreenshot(
+                client.runDirectory,
+                screenshotName,
+                client.getFramebuffer(),
+                1,
+                message -> {}
+        );
+
+        session.captures.add(hudCaptureToJson(target, screenshotPath, capturedAtMillis));
+    }
+
+    private Path writeHudTestManifest(MinecraftClient client, HudCaptureSession session) throws IOException {
+        Path hudTestDir = client.runDirectory.toPath().resolve("browsecraft").resolve("hud-test");
+        Files.createDirectories(hudTestDir);
+
+        JsonObject root = new JsonObject();
+        root.addProperty("trigger", "hud-test");
+        root.addProperty("session_timestamp_ms", session.sessionTimestamp);
+        root.addProperty("run_directory", client.runDirectory.toPath().toAbsolutePath().toString());
+        root.addProperty("latest_status_message", latestStatusMessage);
+        root.addProperty("auto_started", hudTestStartupTriggered);
+        root.addProperty("auto_exit_enabled", Boolean.getBoolean(HUD_TEST_EXIT_ON_COMPLETE_PROPERTY));
+
+        JsonArray captures = new JsonArray();
+        for (JsonObject capture : session.captures) {
+            captures.add(capture.deepCopy());
+        }
+        root.add("captures", captures);
+
+        String payload = GSON.toJson(root);
+        Path manifestPath = hudTestDir.resolve("hud-test-" + session.sessionTimestamp + ".json");
+        Path latestManifestPath = hudTestDir.resolve("latest.json");
+        Files.writeString(manifestPath, payload);
+        Files.writeString(latestManifestPath, payload);
+        return manifestPath;
+    }
+
+    private JsonObject hudCaptureToJson(HudCaptureTarget target, Path screenshotPath, long capturedAtMillis) {
+        HudRenderSnapshot snapshot = latestHudRenderSnapshot;
+        JsonObject capture = new JsonObject();
+        capture.addProperty("label", target.label());
+        capture.addProperty("mode", target.mode().name());
+        capture.addProperty("captured_at_ms", capturedAtMillis);
+        capture.addProperty("screenshot_path", screenshotPath.toString());
+        capture.addProperty("visible", snapshot.visible());
+        capture.addProperty("screen_width", snapshot.screenWidth());
+        capture.addProperty("screen_height", snapshot.screenHeight());
+        capture.addProperty("header", snapshot.header());
+        capture.addProperty("active_status_text", snapshot.activeToolStatus());
+        capture.addProperty("assistant_streaming", snapshot.assistantStreaming());
+        capture.addProperty("input_text", snapshot.inputText());
+        capture.addProperty("cursor_index", snapshot.cursorIndex());
+        capture.addProperty("cursor_x", snapshot.cursorX());
+        capture.addProperty("visible_start_index", snapshot.visibleStartIndex());
+        if (snapshot.panelBounds() != null) {
+            capture.add("panel_bounds", hudBoundsToJson(snapshot.panelBounds()));
+        }
+        if (snapshot.inputBounds() != null) {
+            capture.add("input_bounds", hudBoundsToJson(snapshot.inputBounds()));
+        }
+
+        JsonArray wrappedLines = new JsonArray();
+        for (RenderedLine line : snapshot.wrappedLines()) {
+            wrappedLines.add(line.plainText());
+        }
+        capture.add("wrapped_lines", wrappedLines);
+
+        JsonArray visibleWrappedLines = new JsonArray();
+        for (int index = snapshot.visibleStartIndex(); index < snapshot.wrappedLines().size(); index++) {
+            visibleWrappedLines.add(snapshot.wrappedLines().get(index).plainText());
+        }
+        capture.add("visible_wrapped_lines", visibleWrappedLines);
+        return capture;
+    }
+
+    private JsonObject hudBoundsToJson(HudBounds bounds) {
+        JsonObject json = new JsonObject();
+        json.addProperty("left", bounds.left());
+        json.addProperty("top", bounds.top());
+        json.addProperty("right", bounds.right());
+        json.addProperty("bottom", bounds.bottom());
+        json.addProperty("width", bounds.right() - bounds.left());
+        json.addProperty("height", bounds.bottom() - bounds.top());
+        return json;
+    }
+
     private void captureBuildTestArtifacts(MinecraftClient client) {
         try {
             OverlaySnapshot snapshot = overlayState.snapshot();
@@ -871,6 +1321,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
         position.addProperty("block_x", client.player.getBlockX());
         position.addProperty("block_y", client.player.getBlockY());
         position.addProperty("block_z", client.player.getBlockZ());
+        position.addProperty("ground_y", findGroundY(client.world, client.player.getBlockPos()));
         position.addProperty("facing", client.player.getHorizontalFacing().asString());
         position.addProperty("dimension", client.world.getRegistryKey().getValue().toString());
         return position;
@@ -1076,15 +1527,36 @@ public final class BrowseCraftClient implements ClientModInitializer {
         int anchorX = Integer.MAX_VALUE;
         int anchorY = Integer.MAX_VALUE;
         int anchorZ = Integer.MAX_VALUE;
+        List<PlacementBatchPlanner.Placement> plannerInput = new ArrayList<>(targetByPos.size());
         List<AbsolutePlacement> previousPlacements = new ArrayList<>(targetByPos.size());
         for (Map.Entry<BlockPos, String> entry : targetByPos.entrySet()) {
             BlockPos pos = entry.getKey();
             String previousBlockId = Registries.BLOCK.getId(client.world.getBlockState(pos).getBlock()).toString();
+            plannerInput.add(new PlacementBatchPlanner.Placement(pos.getX(), pos.getY(), pos.getZ(), entry.getValue()));
             previousPlacements.add(new AbsolutePlacement(pos.getX(), pos.getY(), pos.getZ(), previousBlockId));
-            sendCommand(client, "setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + entry.getValue() + " replace");
             anchorX = Math.min(anchorX, pos.getX());
             anchorY = Math.min(anchorY, pos.getY());
             anchorZ = Math.min(anchorZ, pos.getZ());
+        }
+
+        PlacementBatchPlanner.Plan batchPlan = PlacementBatchPlanner.plan(plannerInput);
+        for (PlacementBatchPlanner.Cuboid cuboid : batchPlan.fillCuboids()) {
+            sendCommand(client, fillCommand(
+                    cuboid.minX(),
+                    cuboid.minY(),
+                    cuboid.minZ(),
+                    cuboid.maxX(),
+                    cuboid.maxY(),
+                    cuboid.maxZ(),
+                    cuboid.blockId()
+            ));
+        }
+        List<String> queuedSetblockCommands = new ArrayList<>(batchPlan.setBlocks().size());
+        for (PlacementBatchPlanner.Placement setBlock : batchPlan.setBlocks()) {
+            queuedSetblockCommands.add(setblockCommand(setBlock.x(), setBlock.y(), setBlock.z(), setBlock.blockId()));
+        }
+        for (String command : queuedSetblockCommands) {
+            sendCommand(client, command);
         }
 
         undoWorldPlacements = previousPlacements;
@@ -1096,6 +1568,8 @@ public final class BrowseCraftClient implements ClientModInitializer {
 
         JsonObject result = new JsonObject();
         result.addProperty("placed_count", targetByPos.size());
+        result.addProperty("fill_count", batchPlan.fillCuboids().size());
+        result.addProperty("setblock_count", batchPlan.setBlocks().size());
         result.add("anchor", blockPosToJson(anchor));
         return result;
     }
@@ -1129,7 +1603,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
             }
         }
 
-        sendCommand(client, "fill " + minX + " " + minY + " " + minZ + " " + maxX + " " + maxY + " " + maxZ + " " + blockId + " replace");
+        sendCommand(client, fillCommand(minX, minY, minZ, maxX, maxY, maxZ, blockId));
         undoWorldPlacements = previousPlacements;
         undoBlueprintState = null;
         undoClearsOverlay = false;
@@ -1153,7 +1627,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
                 throw new IllegalStateException("undo_last requires an active player and network handler");
             }
             for (AbsolutePlacement placement : undoWorldPlacements) {
-                sendCommand(client, "setblock " + placement.x() + " " + placement.y() + " " + placement.z() + " " + placement.blockId() + " replace");
+                sendCommand(client, setblockCommand(placement.x(), placement.y(), placement.z(), placement.blockId()));
             }
             undoWorldPlacements = null;
         } else if (undoClearsOverlay) {
@@ -1170,6 +1644,14 @@ public final class BrowseCraftClient implements ClientModInitializer {
         result.addProperty("undone", true);
         result.add("overlay", activeOverlaySummary(overlayState.snapshot()));
         return result;
+    }
+
+    private String fillCommand(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, String blockId) {
+        return "fill " + minX + " " + minY + " " + minZ + " " + maxX + " " + maxY + " " + maxZ + " " + blockId + " replace";
+    }
+
+    private String setblockCommand(int x, int y, int z, String blockId) {
+        return "setblock " + x + " " + y + " " + z + " " + blockId + " replace";
     }
 
     private void sendCommand(MinecraftClient client, String command) {
@@ -1280,6 +1762,18 @@ public final class BrowseCraftClient implements ClientModInitializer {
         return json;
     }
 
+    private int findGroundY(ClientWorld world, BlockPos playerPos) {
+        int bottomY = world.getBottomY();
+        for (int y = playerPos.getY() - 1; y >= bottomY; y--) {
+            BlockPos scanPos = new BlockPos(playerPos.getX(), y, playerPos.getZ());
+            BlockState state = world.getBlockState(scanPos);
+            if (!state.isAir() && !state.getCollisionShape(world, scanPos).isEmpty()) {
+                return y;
+            }
+        }
+        return playerPos.getY() - 1;
+    }
+
     private BlockPos requiredBlockPos(JsonObject object, String key) {
         JsonElement element = object.get(key);
         if (element == null || !element.isJsonObject()) {
@@ -1350,6 +1844,13 @@ public final class BrowseCraftClient implements ClientModInitializer {
             return;
         }
         instance.runBuildTestCommand(MinecraftClient.getInstance());
+    }
+
+    public static void onHudTestCommand() {
+        if (instance == null) {
+            return;
+        }
+        instance.runHudTestCommand(MinecraftClient.getInstance());
     }
 
     public static void onChatBuildTestCommand(String message) {
@@ -1538,11 +2039,77 @@ public final class BrowseCraftClient implements ClientModInitializer {
         return latestBuildTestScreenshotPath;
     }
 
+    public static Path latestHudTestJsonPath() {
+        return latestHudTestJsonPath;
+    }
+
     public static String latestStatusMessage() {
         if (instance == null) {
             return "";
         }
         return instance.latestStatusMessage;
+    }
+
+    private enum ChatRole {
+        USER,
+        ASSISTANT
+    }
+
+    private record ChatMessage(ChatRole role, String text) {
+    }
+
+    private record RenderedLine(String plainText, OrderedText orderedText, int color) {
+    }
+
+    private record HudBounds(int left, int top, int right, int bottom) {
+    }
+
+    private record HudRenderSnapshot(
+            HudChatState.Mode mode,
+            boolean visible,
+            int screenWidth,
+            int screenHeight,
+            String header,
+            String activeToolStatus,
+            boolean assistantStreaming,
+            HudBounds panelBounds,
+            HudBounds inputBounds,
+            List<RenderedLine> wrappedLines,
+            int visibleStartIndex,
+            String inputText,
+            int cursorIndex,
+            int cursorX
+    ) {
+    }
+
+    private record HudCaptureTarget(HudChatState.Mode mode, String label) {
+    }
+
+    private record HudDebugState(
+            List<ChatMessage> chatHistory,
+            String activeToolStatus,
+            boolean assistantStreaming,
+            HudChatState.Snapshot hudState
+    ) {
+    }
+
+    private static final class HudCaptureSession {
+        private final long sessionTimestamp;
+        private final HudDebugState previousState;
+        private final List<HudCaptureTarget> targets;
+        private final List<JsonObject> captures = new ArrayList<>();
+        private int captureIndex;
+        private int settleTicksRemaining;
+
+        private HudCaptureSession(long sessionTimestamp, HudDebugState previousState, List<HudCaptureTarget> targets) {
+            this.sessionTimestamp = sessionTimestamp;
+            this.previousState = previousState;
+            this.targets = targets;
+        }
+
+        private HudCaptureTarget currentTarget() {
+            return targets.get(captureIndex);
+        }
     }
 
     private record AbsolutePlacement(int x, int y, int z, String blockId) {
