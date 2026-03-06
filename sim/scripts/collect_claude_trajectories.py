@@ -27,6 +27,7 @@ _SYSTEM_PROMPT = (
     "Prefer exact coordinate placement when task provides absolute targets.\n"
     "Do not add unrelated blocks."
 )
+_CACHE_CONTROL_EPHEMERAL = {"type": "ephemeral"}
 
 _TOOLS = [
     {
@@ -149,6 +150,10 @@ _TOOLS = [
         },
     },
 ]
+_CACHEABLE_TOOLS = [
+    *[dict(tool) for tool in _TOOLS[:-1]],
+    {**_TOOLS[-1], "cache_control": _CACHE_CONTROL_EPHEMERAL},
+]
 
 
 def _normalize_assistant_blocks(content_blocks: list[Any]) -> list[dict[str, Any]]:
@@ -168,6 +173,18 @@ def _normalize_assistant_blocks(content_blocks: list[Any]) -> list[dict[str, Any
                 blocks.append({"type": "tool_use", "id": identifier, "name": name, "input": payload})
             continue
     return blocks
+
+
+async def _warmup_prompt_cache(client: AsyncAnthropic, *, model: str) -> None:
+    await client.messages.create(
+        model=model,
+        max_tokens=1,
+        cache_control=_CACHE_CONTROL_EPHEMERAL,
+        temperature=0,
+        system=[{"type": "text", "text": _SYSTEM_PROMPT, "cache_control": _CACHE_CONTROL_EPHEMERAL}],
+        tools=_CACHEABLE_TOOLS,
+        messages=[{"role": "user", "content": [{"type": "text", "text": "warmup"}]}],
+    )
 
 
 async def _run_episode(
@@ -190,17 +207,27 @@ async def _run_episode(
         started_at=datetime.now(UTC),
     )
     messages: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": task.prompt}]}]
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cache_creation_input_tokens = 0
+    total_cache_read_input_tokens = 0
 
     for round_index in range(max_rounds):
         trace.tool_round_count = round_index + 1
         response = await client.messages.create(
             model=model,
             max_tokens=768,
+            cache_control=_CACHE_CONTROL_EPHEMERAL,
             temperature=0,
-            system=[{"type": "text", "text": _SYSTEM_PROMPT}],
-            tools=_TOOLS,
+            system=[{"type": "text", "text": _SYSTEM_PROMPT, "cache_control": _CACHE_CONTROL_EPHEMERAL}],
+            tools=_CACHEABLE_TOOLS,
             messages=messages,
         )
+        usage = response.usage
+        total_input_tokens += usage.input_tokens
+        total_output_tokens += usage.output_tokens
+        total_cache_creation_input_tokens += usage.cache_creation_input_tokens or 0
+        total_cache_read_input_tokens += usage.cache_read_input_tokens or 0
         assistant_blocks = _normalize_assistant_blocks(response.content)
         messages.append({"role": "assistant", "content": assistant_blocks})
         trace.messages = validate_anthropic_messages(messages)
@@ -250,6 +277,12 @@ async def _run_episode(
         "grader": breakdown.model_dump(mode="json"),
         "reward_raw": breakdown.reward_raw,
         "reward_normalized": breakdown.reward_normalized,
+        "usage": {
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "cache_creation_input_tokens": total_cache_creation_input_tokens,
+            "cache_read_input_tokens": total_cache_read_input_tokens,
+        },
     }
 
 
@@ -264,6 +297,7 @@ async def _run(args: argparse.Namespace) -> list[dict[str, Any]]:
     tasks = generate_tasks(seed=args.seed, per_tier=args.per_tier)
     client = AsyncAnthropic(api_key=api_key)
     semaphore = asyncio.Semaphore(args.concurrency)
+    await _warmup_prompt_cache(client, model=args.model)
 
     async def run_one(task: Any) -> dict[str, Any]:
         async with semaphore:
@@ -287,7 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default="claude-sonnet-4-6")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--per-tier", type=int, default=1)
-    parser.add_argument("--max-rounds", type=int, default=20)
+    parser.add_argument("--max-rounds", type=int, default=12)
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--output", default="raw_episodes.jsonl")
     return parser
@@ -301,7 +335,19 @@ def main() -> None:
         "\n".join(json.dumps(row) for row in rows) + ("\n" if rows else ""),
         encoding="utf-8",
     )
-    print(json.dumps({"output": str(output), "episodes": len(rows), "model": args.model}, indent=2, sort_keys=True))
+    usage_totals = {
+        "input_tokens": sum(row["usage"]["input_tokens"] for row in rows),
+        "output_tokens": sum(row["usage"]["output_tokens"] for row in rows),
+        "cache_creation_input_tokens": sum(row["usage"]["cache_creation_input_tokens"] for row in rows),
+        "cache_read_input_tokens": sum(row["usage"]["cache_read_input_tokens"] for row in rows),
+    }
+    print(
+        json.dumps(
+            {"output": str(output), "episodes": len(rows), "model": args.model, "usage": usage_totals},
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":
