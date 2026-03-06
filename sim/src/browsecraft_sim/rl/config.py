@@ -18,10 +18,11 @@ class RewardConfig(BaseModel):
     weight_efficiency: float = Field(default=0.2, ge=0.0)
     weight_structural: float = Field(default=0.1, ge=0.0)
     weight_format: float = Field(default=0.1, ge=0.0)
+    efficiency_min_correctness: float = Field(default=0.1, ge=0.0, le=1.0)
     expected_tool_calls_by_tier: dict[Tier, int] = Field(
         default_factory=lambda: {
-            "t1_absolute": 2,
-            "t2_relative_single_ref": 3,
+            "t1_absolute": 1,
+            "t2_relative_single_ref": 2,
             "t3_primitives": 4,
             "t4_structure_relative": 6,
             "t5_modification": 7,

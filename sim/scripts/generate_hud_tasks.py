@@ -72,6 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weight-efficiency", type=float, default=None)
     parser.add_argument("--weight-structural", type=float, default=None)
     parser.add_argument("--weight-format", type=float, default=None)
+    parser.add_argument("--efficiency-min-correctness", type=float, default=None)
     return parser
 
 
@@ -86,6 +87,7 @@ def main() -> None:
             "weight_efficiency": args.weight_efficiency,
             "weight_structural": args.weight_structural,
             "weight_format": args.weight_format,
+            "efficiency_min_correctness": args.efficiency_min_correctness,
         }.items()
         if value is not None
     }

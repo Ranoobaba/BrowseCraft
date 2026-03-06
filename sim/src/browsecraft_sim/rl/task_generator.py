@@ -141,7 +141,7 @@ def _build_t1_absolute(*, seed: int, index: int, rng: random.Random) -> TaskSpec
         seed=seed,
         prompt=prompt,
         target_blocks=target,
-        expected_tool_calls=2,
+        expected_tool_calls=1,
         structural_checks=StructuralChecks(require_grounded=True),
         metadata={"difficulty": "easy"},
     )
@@ -180,7 +180,7 @@ def _build_t2_relative(*, seed: int, index: int, rng: random.Random) -> TaskSpec
         prompt=prompt,
         setup_blocks=[reference],
         target_blocks=[target],
-        expected_tool_calls=3,
+        expected_tool_calls=2,
         structural_checks=StructuralChecks(require_grounded=True),
         metadata={"relation": relation, "distance": distance},
     )
