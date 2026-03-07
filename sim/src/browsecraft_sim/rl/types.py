@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-Tier = Literal[
+BuildTier = Literal[
     "t1_absolute",
     "t2_relative_single_ref",
     "t3_primitives",
@@ -16,15 +16,33 @@ Tier = Literal[
     "t6_composition",
 ]
 
+TextQATier = Literal[
+    "qa_directional_single_hop",
+    "qa_multi_hop_chain",
+    "qa_viewpoint_transform",
+    "qa_topology",
+]
+
+TaskMode = Literal["build", "text_qa"]
+AnswerFormat = Literal["single_token", "entity_name", "yes_no", "coordinate"]
+Tier = BuildTier
+
 SpanAxis = Literal["x", "y", "z"]
 
-ALL_TIERS: tuple[Tier, ...] = (
+ALL_TIERS: tuple[BuildTier, ...] = (
     "t1_absolute",
     "t2_relative_single_ref",
     "t3_primitives",
     "t4_structure_relative",
     "t5_modification",
     "t6_composition",
+)
+
+ALL_TEXT_QA_TIERS: tuple[TextQATier, ...] = (
+    "qa_directional_single_hop",
+    "qa_multi_hop_chain",
+    "qa_viewpoint_transform",
+    "qa_topology",
 )
 
 
@@ -76,6 +94,22 @@ class TaskSpec(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class TextQATaskSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(default_factory=lambda: str(uuid4()), min_length=1)
+    tier: TextQATier
+    family: str = Field(min_length=1)
+    seed: int
+    prompt: str = Field(min_length=1)
+    player: PlayerSpec = Field(default_factory=PlayerSpec)
+    setup_blocks: list[BlockPlacement] = Field(default_factory=list)
+    expected_answer: str = Field(min_length=1)
+    answer_format: AnswerFormat
+    canonical_reasoning: list[str] = Field(min_length=1)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ToolCallRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -90,8 +124,9 @@ class EpisodeTrace(BaseModel):
 
     episode_id: str = Field(default_factory=lambda: str(uuid4()), min_length=1)
     task_id: str = Field(min_length=1)
-    tier: Tier
+    tier: str = Field(min_length=1)
     seed: int
+    task_mode: TaskMode = "build"
     model: str = Field(default="", min_length=0)
     system_prompt: str = ""
     messages: list[dict[str, Any]] = Field(default_factory=list)
@@ -112,7 +147,8 @@ class RewardBreakdown(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(min_length=1)
-    tier: Tier
+    tier: str = Field(min_length=1)
+    task_mode: TaskMode = "build"
     format_valid: bool
     format_score: float = Field(ge=0.0, le=1.0)
     correctness_score: float = Field(ge=0.0, le=1.0)
@@ -120,4 +156,5 @@ class RewardBreakdown(BaseModel):
     structural_score: float = Field(ge=0.0, le=1.0)
     reward_raw: float
     reward_normalized: float = Field(ge=0.0, le=1.0)
+    reward_binary: float = Field(ge=0.0, le=1.0)
     details: dict[str, float | int | str | bool] = Field(default_factory=dict)

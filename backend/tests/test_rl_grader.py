@@ -36,6 +36,7 @@ def test_t1_perfect_exact_match_scores_high() -> None:
     breakdown = grade_task(task=task, world=world, trace=trace, config=RewardConfig(format_mode="gate"))
     assert breakdown.correctness_score == 1.0
     assert breakdown.reward_normalized > 0.95
+    assert breakdown.reward_binary == 1.0
 
 
 def test_format_failure_zeroes_reward_in_gate_mode() -> None:
@@ -54,6 +55,7 @@ def test_format_failure_zeroes_reward_in_gate_mode() -> None:
     breakdown = grade_task(task=task, world=world, trace=trace, config=RewardConfig(format_mode="gate"))
     assert breakdown.reward_raw == 0.0
     assert breakdown.reward_normalized == 0.0
+    assert breakdown.reward_binary == 0.0
 
 
 def test_t6_underbuild_is_penalized() -> None:
@@ -66,6 +68,7 @@ def test_t6_underbuild_is_penalized() -> None:
     breakdown = grade_task(task=task, world=world, trace=trace, config=RewardConfig(format_mode="gate"))
     assert breakdown.correctness_score < 0.7
     assert breakdown.reward_normalized < 0.8
+    assert breakdown.reward_binary == 0.0
 
 
 def test_t6_disconnected_shape_fails_structural_check() -> None:
@@ -80,3 +83,4 @@ def test_t6_disconnected_shape_fails_structural_check() -> None:
     breakdown = grade_task(task=task, world=world, trace=trace, config=RewardConfig(format_mode="gate"))
     assert breakdown.structural_score < 1.0
     assert breakdown.reward_normalized < 0.7
+    assert breakdown.reward_binary == 0.0

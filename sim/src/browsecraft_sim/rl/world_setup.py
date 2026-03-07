@@ -4,22 +4,31 @@ from typing import Iterable
 
 from browsecraft_sim.main import HeadlessVoxelWorld, PlayerState
 
-from .types import BlockPlacement, TaskSpec
+from .types import BlockPlacement, PlayerSpec, TaskSpec, TextQATaskSpec
 
 
-def build_world(task: TaskSpec, terrain_radius: int = 24) -> HeadlessVoxelWorld:
+def build_world_from_setup(
+    *,
+    player: PlayerSpec,
+    setup_blocks: Iterable[BlockPlacement],
+    terrain_radius: int = 24,
+) -> HeadlessVoxelWorld:
     world = HeadlessVoxelWorld(
         player=PlayerState(
-            x=task.player.x,
-            y=task.player.y,
-            z=task.player.z,
-            facing=task.player.facing,
-            dimension=task.player.dimension,
+            x=player.x,
+            y=player.y,
+            z=player.z,
+            facing=player.facing,
+            dimension=player.dimension,
         )
     )
     world.flat_terrain(radius=terrain_radius)
-    apply_blocks(world, task.setup_blocks)
+    apply_blocks(world, setup_blocks)
     return world
+
+
+def build_world(task: TaskSpec | TextQATaskSpec, terrain_radius: int = 24) -> HeadlessVoxelWorld:
+    return build_world_from_setup(player=task.player, setup_blocks=task.setup_blocks, terrain_radius=terrain_radius)
 
 
 def apply_blocks(world: HeadlessVoxelWorld, blocks: Iterable[BlockPlacement]) -> None:

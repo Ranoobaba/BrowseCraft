@@ -43,6 +43,7 @@ class EpisodeTrajectoryRecord(BaseModel):
     episode_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     tier: str = Field(min_length=1)
+    task_mode: str = Field(min_length=1)
     seed: int
     model: str = Field(min_length=1)
     system_prompt: str = ""
@@ -52,6 +53,7 @@ class EpisodeTrajectoryRecord(BaseModel):
     grader: dict[str, Any] = Field(default_factory=dict)
     reward_raw: float
     reward_normalized: float = Field(ge=0.0, le=1.0)
+    reward_binary: float = Field(ge=0.0, le=1.0)
     final_world_diff: list[dict[str, Any]] = Field(default_factory=list)
     started_at: str = Field(min_length=1)
     ended_at: str = Field(min_length=1)
@@ -78,6 +80,7 @@ def trace_to_trajectory_record(
     grader: dict[str, Any],
     reward_raw: float,
     reward_normalized: float,
+    reward_binary: float,
 ) -> EpisodeTrajectoryRecord:
     if trace.ended_at is None:
         raise ValueError("trace ended_at must be set before export")
@@ -86,6 +89,7 @@ def trace_to_trajectory_record(
         episode_id=trace.episode_id,
         task_id=trace.task_id,
         tier=trace.tier,
+        task_mode=trace.task_mode,
         seed=trace.seed,
         model=model,
         system_prompt=trace.system_prompt,
@@ -95,6 +99,7 @@ def trace_to_trajectory_record(
         grader=grader,
         reward_raw=reward_raw,
         reward_normalized=reward_normalized,
+        reward_binary=reward_binary,
         final_world_diff=[placement.model_dump(mode="json") for placement in trace.final_world_diff],
         started_at=trace.started_at.isoformat(),
         ended_at=trace.ended_at.isoformat(),
@@ -109,6 +114,10 @@ def read_trajectory_jsonl(path: str | Path) -> list[EpisodeTrajectoryRecord]:
         if not stripped:
             continue
         payload = json.loads(stripped)
+        if "task_mode" not in payload:
+            payload["task_mode"] = "build"
+        if "reward_binary" not in payload and "reward_normalized" in payload:
+            payload["reward_binary"] = 1.0 if float(payload["reward_normalized"]) >= 0.8 else 0.0
         try:
             record = EpisodeTrajectoryRecord.model_validate(payload)
         except ValidationError as exc:

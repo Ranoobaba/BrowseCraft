@@ -18,6 +18,7 @@ class RawTrajectoryInput(BaseModel):
     grader: dict[str, object] = Field(default_factory=dict)
     reward_raw: float
     reward_normalized: float = Field(ge=0.0, le=1.0)
+    reward_binary: float = Field(ge=0.0, le=1.0)
 
 
 def _read_raw_inputs(path: Path) -> list[RawTrajectoryInput]:
@@ -46,6 +47,7 @@ def run(input_path: Path, output_path: Path) -> list[EpisodeTrajectoryRecord]:
                 grader=row.grader,
                 reward_raw=row.reward_raw,
                 reward_normalized=row.reward_normalized,
+                reward_binary=row.reward_binary,
             )
         )
     write_trajectory_jsonl(output_path, records)

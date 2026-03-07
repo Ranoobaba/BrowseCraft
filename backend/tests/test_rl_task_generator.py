@@ -28,6 +28,9 @@ def test_t4_has_required_families() -> None:
         "south_face_marker",
         "inside_room_through_doorway",
         "shorter_tower_marker",
+        "marker_chain_place",
+        "structure_chain_place",
+        "mark_structure_inside_enclosure",
     }
 
 
@@ -38,6 +41,7 @@ def test_t5_has_required_families() -> None:
         "widen_or_reposition_opening",
         "add_window_to_wall",
         "move_window_to_opposite_wall",
+        "add_shared_wall_doorway",
     }
 
 
@@ -109,3 +113,96 @@ def test_t6_bridge_target_uses_walkable_top_span() -> None:
     target_ys = {block.y for block in task.target_blocks}
     assert target_ys == {68}
     assert target_xs == list(range(tower_xs[0], tower_xs[-1] + 1))
+
+
+def test_t2_generates_egocentric_relative_family() -> None:
+    families = {generate_task(tier="t2_relative_single_ref", seed=33, index=index).family for index in range(60)}
+    assert "egocentric_relative" in families
+
+
+def test_t2_egocentric_relative_target_matches_player_facing() -> None:
+    task = _find_family_task(tier="t2_relative_single_ref", family="egocentric_relative", seed=2026)
+    target = task.target_blocks[0]
+    relation = task.metadata["relation"]
+    facing = task.player.facing
+    expected_offsets = {
+        ("north", "front"): (0, -1),
+        ("north", "behind"): (0, 1),
+        ("north", "left"): (-1, 0),
+        ("north", "right"): (1, 0),
+        ("south", "front"): (0, 1),
+        ("south", "behind"): (0, -1),
+        ("south", "left"): (1, 0),
+        ("south", "right"): (-1, 0),
+        ("east", "front"): (1, 0),
+        ("east", "behind"): (-1, 0),
+        ("east", "left"): (0, -1),
+        ("east", "right"): (0, 1),
+        ("west", "front"): (-1, 0),
+        ("west", "behind"): (1, 0),
+        ("west", "left"): (0, 1),
+        ("west", "right"): (0, -1),
+    }
+    distance = task.metadata["distance"]
+    expected_dx, expected_dz = expected_offsets[(facing, relation)]
+    assert (target.x, target.z) == (expected_dx * distance, expected_dz * distance)
+
+
+def test_t4_marker_chain_places_block_above_final_marker() -> None:
+    task = _find_family_task(tier="t4_structure_relative", family="marker_chain_place", seed=2026)
+    markers = task.metadata["canonical_intent"]["markers"]
+    final_marker = markers[-1]
+    target = task.target_blocks[0]
+    assert task.metadata["hop_count"] >= 2
+    assert target.x == final_marker["x"]
+    assert target.y == final_marker["y"] + 1
+    assert target.z == final_marker["z"]
+
+
+def test_t4_structure_chain_can_reach_six_hops() -> None:
+    hop_counts = set()
+    for index in range(800):
+        task = generate_task(tier="t4_structure_relative", seed=2026, index=index)
+        if task.family != "structure_chain_place":
+            continue
+        hop_counts.add(task.metadata["hop_count"])
+        if 6 in hop_counts:
+            break
+    assert 6 in hop_counts
+
+
+def test_t4_inside_enclosure_targets_only_internal_tower() -> None:
+    task = _find_family_task(tier="t4_structure_relative", family="mark_structure_inside_enclosure", seed=2026)
+    inside = task.metadata["canonical_intent"]["inside_tower"]
+    target = task.target_blocks[0]
+    assert target.x == inside["x"]
+    assert target.z == inside["z"]
+
+
+def test_t5_shared_wall_doorway_targets_center_of_touching_wall() -> None:
+    task = _find_family_task(tier="t5_modification", family="add_shared_wall_doorway", seed=2026)
+    doorway_coords = {(block.x, block.y, block.z) for block in task.target_blocks}
+    assert len(doorway_coords) == 2
+    assert {coord[1] for coord in doorway_coords} == {64, 65}
+    assert len({coord[0] for coord in doorway_coords}) == 1
+    assert len({coord[2] for coord in doorway_coords}) == 1
+
+
+def test_harder_tiers_can_include_logged_distractors() -> None:
+    distracted = []
+    for tier in ("t4_structure_relative", "t5_modification", "t6_composition"):
+        for index in range(200):
+            task = generate_task(tier=tier, seed=2026, index=index)
+            distractor = task.metadata.get("distractor")
+            if distractor is None:
+                continue
+            target_coords = {(block.x, block.y, block.z) for block in task.target_blocks}
+            distractor_base = distractor["base"]
+            distractor_coords = {
+                (distractor_base["x"], distractor_base["y"] + dy, distractor_base["z"])
+                for dy in range(distractor["height"])
+            }
+            assert distractor_coords.isdisjoint(target_coords)
+            distracted.append(tier)
+            break
+    assert set(distracted) == {"t4_structure_relative", "t5_modification", "t6_composition"}

@@ -12,7 +12,7 @@ from .metrics import (
     preservation_score,
     span_length,
 )
-from .reward import compose_reward, effective_efficiency_score
+from .reward import binary_reward, compose_reward, effective_efficiency_score
 from .types import BlockPlacement, EpisodeTrace, RewardBreakdown, TaskSpec
 from .world_setup import deserialize_snapshot
 
@@ -62,16 +62,19 @@ def grade_task(
         structural_score=structural_score,
         config=reward_config,
     )
+    reward_binary = binary_reward(normalized_reward=reward_normalized, config=reward_config)
 
     details["correctness"] = round(correctness_score, 6)
     details["efficiency_base"] = round(efficiency_score, 6)
     details["efficiency_effective"] = round(effective_efficiency, 6)
     details["efficiency_min_correctness"] = round(reward_config.efficiency_min_correctness, 6)
+    details["binary_reward_threshold"] = round(reward_config.binary_reward_threshold, 6)
     details["structural"] = round(structural_score, 6)
 
     return RewardBreakdown(
         task_id=task.task_id,
         tier=task.tier,
+        task_mode=trace.task_mode,
         format_valid=format_valid,
         format_score=format_score,
         correctness_score=correctness_score,
@@ -79,6 +82,7 @@ def grade_task(
         structural_score=structural_score,
         reward_raw=reward_raw,
         reward_normalized=reward_normalized,
+        reward_binary=reward_binary,
         details=details,
     )
 

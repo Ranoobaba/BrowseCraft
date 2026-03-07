@@ -23,21 +23,22 @@ def _trajectory_to_rft_task(record: EpisodeTrajectoryRecord) -> RftTaskRecord:
         "system_prompt": record.system_prompt,
         "messages": [message.model_dump(mode="json") for message in record.messages],
     }
-    rubric = {
-        "reward_normalized": record.reward_normalized,
-        "reward_raw": record.reward_raw,
-        "grader": record.grader,
-    }
+    rubric = {"reward": record.reward_binary}
     metadata = {
         "episode_id": record.episode_id,
         "task_id": record.task_id,
         "tier": record.tier,
+        "task_mode": record.task_mode,
         "seed": record.seed,
         "model": record.model,
         "tool_call_count": record.tool_call_count,
         "tool_round_count": record.tool_round_count,
         "started_at": record.started_at,
         "ended_at": record.ended_at,
+        "reward_raw": record.reward_raw,
+        "reward_normalized": record.reward_normalized,
+        "reward_binary": record.reward_binary,
+        "grader": record.grader,
         "final_world_diff": record.final_world_diff,
     }
     return RftTaskRecord(input=payload, rubric=rubric, metadata=metadata)

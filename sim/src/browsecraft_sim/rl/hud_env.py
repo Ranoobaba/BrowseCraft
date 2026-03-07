@@ -253,6 +253,7 @@ async def rl_grade_task() -> dict[str, Any]:
         return {
             "reward": breakdown.reward_normalized,
             "score": breakdown.reward_normalized,
+            "reward_binary": breakdown.reward_binary,
             "task_id": session.task.task_id,
             "tier": session.task.tier,
             "subscores": {

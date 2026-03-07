@@ -5,7 +5,7 @@ import json
 import pytest
 
 from browsecraft_sim.rl.config import RewardConfig, load_reward_config
-from browsecraft_sim.rl.reward import compose_reward
+from browsecraft_sim.rl.reward import binary_reward, compose_reward
 
 
 def test_gate_mode_zeroes_reward_on_format_failure() -> None:
@@ -93,3 +93,9 @@ def test_default_expected_tool_call_budgets_match_calibrated_p75s() -> None:
     assert config.expected_tool_calls_by_tier["t4_structure_relative"] == 4
     assert config.expected_tool_calls_by_tier["t5_modification"] == 8
     assert config.expected_tool_calls_by_tier["t6_composition"] == 8
+
+
+def test_binary_reward_threshold_defaults_to_point_eight() -> None:
+    config = RewardConfig()
+    assert binary_reward(normalized_reward=0.79, config=config) == 0.0
+    assert binary_reward(normalized_reward=0.8, config=config) == 1.0

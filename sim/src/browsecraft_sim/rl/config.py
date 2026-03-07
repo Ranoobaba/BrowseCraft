@@ -19,6 +19,7 @@ class RewardConfig(BaseModel):
     weight_structural: float = Field(default=0.1, ge=0.0)
     weight_format: float = Field(default=0.1, ge=0.0)
     efficiency_min_correctness: float = Field(default=0.1, ge=0.0, le=1.0)
+    binary_reward_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     expected_tool_calls_by_tier: dict[Tier, int] = Field(
         default_factory=lambda: {
             "t1_absolute": 1,
@@ -48,7 +49,10 @@ class RewardConfig(BaseModel):
         return self
 
     def expected_tool_calls(self, task: TaskSpec) -> int:
-        return self.expected_tool_calls_by_tier.get(task.tier, task.expected_tool_calls)
+        configured = self.expected_tool_calls_by_tier.get(task.tier)
+        if configured is None:
+            return task.expected_tool_calls
+        return task.expected_tool_calls if task.expected_tool_calls != configured else configured
 
 
 def load_reward_config(path: str | Path | None, overrides: dict[str, Any] | None = None) -> RewardConfig:

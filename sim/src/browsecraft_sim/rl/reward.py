@@ -55,3 +55,7 @@ def compose_reward(
     )
     normalized = 0.0 if max_raw == 0 else raw / max_raw
     return format_score, raw, max(0.0, min(1.0, normalized))
+
+
+def binary_reward(*, normalized_reward: float, config: RewardConfig) -> float:
+    return 1.0 if normalized_reward >= config.binary_reward_threshold else 0.0
