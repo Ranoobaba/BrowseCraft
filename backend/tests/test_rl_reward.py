@@ -5,6 +5,7 @@ import json
 import pytest
 
 from browsecraft_sim.rl.config import RewardConfig, load_reward_config
+from browsecraft_sim.rl.task_generator import generate_task
 from browsecraft_sim.rl.reward import binary_reward, compose_reward
 
 
@@ -69,7 +70,23 @@ def test_efficiency_is_scaled_by_correctness_above_threshold() -> None:
 
 def test_load_reward_config_applies_overrides(tmp_path) -> None:
     config_path = tmp_path / "reward.json"
-    config_path.write_text(json.dumps({"format_mode": "weighted", "weight_format": 0.25}), encoding="utf-8")
+    config_path.write_text(
+        json.dumps(
+            {
+                "format_mode": "weighted",
+                "weight_format": 0.25,
+                "expected_tool_calls_by_tier": {
+                    "t1_absolute": 1,
+                    "t2_relative_single_ref": 2,
+                    "t3_primitives": 2,
+                    "t4_structure_relative": 4,
+                    "t5_modification": 8,
+                    "t6_composition": 8,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     loaded = load_reward_config(
         path=config_path,
         overrides={
@@ -85,14 +102,10 @@ def test_load_reward_config_applies_overrides(tmp_path) -> None:
     assert loaded.efficiency_min_correctness == 0.2
 
 
-def test_default_expected_tool_call_budgets_match_calibrated_p75s() -> None:
+def test_expected_tool_calls_follow_task_budget() -> None:
     config = RewardConfig()
-    assert config.expected_tool_calls_by_tier["t1_absolute"] == 1
-    assert config.expected_tool_calls_by_tier["t2_relative_single_ref"] == 2
-    assert config.expected_tool_calls_by_tier["t3_primitives"] == 2
-    assert config.expected_tool_calls_by_tier["t4_structure_relative"] == 4
-    assert config.expected_tool_calls_by_tier["t5_modification"] == 8
-    assert config.expected_tool_calls_by_tier["t6_composition"] == 8
+    task = generate_task(tier="t4_structure_relative", seed=2026, index=0)
+    assert config.expected_tool_calls(task) == task.expected_tool_calls
 
 
 def test_binary_reward_threshold_defaults_to_point_eight() -> None:

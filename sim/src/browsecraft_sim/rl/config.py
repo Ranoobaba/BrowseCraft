@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from .types import ALL_TIERS, TaskSpec, Tier
+from .types import TaskSpec
 
 
 FormatMode = Literal["gate", "weighted"]
@@ -20,16 +20,6 @@ class RewardConfig(BaseModel):
     weight_format: float = Field(default=0.1, ge=0.0)
     efficiency_min_correctness: float = Field(default=0.1, ge=0.0, le=1.0)
     binary_reward_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
-    expected_tool_calls_by_tier: dict[Tier, int] = Field(
-        default_factory=lambda: {
-            "t1_absolute": 1,
-            "t2_relative_single_ref": 2,
-            "t3_primitives": 2,
-            "t4_structure_relative": 4,
-            "t5_modification": 8,
-            "t6_composition": 8,
-        }
-    )
 
     @model_validator(mode="after")
     def validate_weights(self) -> "RewardConfig":
@@ -41,18 +31,10 @@ class RewardConfig(BaseModel):
             total = self.weight_correctness + self.weight_efficiency + self.weight_structural + self.weight_format
             if total <= 0:
                 raise ValueError("weighted mode requires positive overall weight sum")
-        for tier in ALL_TIERS:
-            if tier not in self.expected_tool_calls_by_tier:
-                raise ValueError(f"missing expected tool call budget for tier={tier}")
-            if self.expected_tool_calls_by_tier[tier] <= 0:
-                raise ValueError(f"expected tool calls for tier={tier} must be > 0")
         return self
 
     def expected_tool_calls(self, task: TaskSpec) -> int:
-        configured = self.expected_tool_calls_by_tier.get(task.tier)
-        if configured is None:
-            return task.expected_tool_calls
-        return task.expected_tool_calls if task.expected_tool_calls != configured else configured
+        return task.expected_tool_calls
 
 
 def load_reward_config(path: str | Path | None, overrides: dict[str, Any] | None = None) -> RewardConfig:

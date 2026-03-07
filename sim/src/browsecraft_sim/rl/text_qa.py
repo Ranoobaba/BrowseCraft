@@ -407,20 +407,44 @@ def _build_viewpoint_transform(*, seed: int, index: int, rng: random.Random) -> 
 def _build_topology(*, seed: int, index: int, rng: random.Random) -> TextQATaskSpec:
     family = rng.choice(["inside_enclosure", "shared_wall_yes_no"])
     if family == "inside_enclosure":
-        enclosure_origin = (-4, 64, -4)
-        inside_base = (0, 64, 0)
-        outside_base = (7, 64, 0)
-        far_base = (-9, 64, 0)
+        enclosure_width = rng.choice([7, 9])
+        enclosure_depth = rng.choice([7, 9])
+        enclosure_origin = (rng.randint(-10, -2), 64, rng.randint(-10, -2))
+        inside_base = (
+            enclosure_origin[0] + rng.randint(1, enclosure_width - 2),
+            64,
+            enclosure_origin[2] + rng.randint(1, enclosure_depth - 2),
+        )
+        outside_base = (
+            enclosure_origin[0] + enclosure_width + rng.randint(2, 4),
+            64,
+            enclosure_origin[2] + rng.randint(1, enclosure_depth - 2),
+        )
+        far_base = (
+            enclosure_origin[0] - rng.randint(4, 6),
+            64,
+            enclosure_origin[2] + rng.randint(1, enclosure_depth - 2),
+        )
+        markers = list(_MARKER_BLOCKS[:3])
+        rng.shuffle(markers)
+        inside_marker, outside_marker, far_marker = markers
         setup_blocks = (
-            _enclosure(enclosure_origin, width=9, depth=9, height=2, block_id="minecraft:stone_bricks")
-            + _tower(inside_base, height=3, block_id="minecraft:red_wool")
-            + _tower(outside_base, height=3, block_id="minecraft:blue_wool")
-            + _tower(far_base, height=3, block_id="minecraft:green_wool")
+            _enclosure(
+                enclosure_origin,
+                width=enclosure_width,
+                depth=enclosure_depth,
+                height=2,
+                block_id="minecraft:stone_bricks",
+            )
+            + _tower(inside_base, height=3, block_id=inside_marker)
+            + _tower(outside_base, height=3, block_id=outside_marker)
+            + _tower(far_base, height=3, block_id=far_marker)
         )
         prompt = (
             "Three material-coded towers are nearby and one of them is inside a stone_bricks enclosure. "
             "Which tower is inside the enclosure?"
         )
+        expected_answer = _marker_name(inside_marker)
         return TextQATaskSpec(
             task_id=_task_id("qa_topology", seed, family, index),
             tier="qa_topology",
@@ -428,36 +452,50 @@ def _build_topology(*, seed: int, index: int, rng: random.Random) -> TextQATaskS
             seed=seed,
             prompt=prompt,
             setup_blocks=setup_blocks,
-            expected_answer=_marker_name("minecraft:red_wool"),
+            expected_answer=expected_answer,
             answer_format="entity_name",
             canonical_reasoning=[
                 "The enclosure bounds the interior region between its walls.",
-                "The red tower sits inside those bounds while the other towers do not.",
-                f"The tower inside the enclosure is {_marker_name('minecraft:red_wool')}.",
+                f"The {_marker_name(inside_marker)} sits inside those bounds while the other towers do not.",
+                f"The tower inside the enclosure is {expected_answer}.",
             ],
             metadata={
-                "inside_tower": _marker_name("minecraft:red_wool"),
-                "inside_entity_block_id": "minecraft:red_wool",
-                "candidate_entity_block_ids": [
-                    "minecraft:red_wool",
-                    "minecraft:blue_wool",
-                    "minecraft:green_wool",
-                ],
+                "inside_tower": expected_answer,
+                "inside_entity_block_id": inside_marker,
+                "candidate_entity_block_ids": [inside_marker, outside_marker, far_marker],
                 "enclosure_block_id": "minecraft:stone_bricks",
+                "enclosure_width": enclosure_width,
+                "enclosure_depth": enclosure_depth,
                 "enclosure_origin": {"x": enclosure_origin[0], "y": enclosure_origin[1], "z": enclosure_origin[2]},
             },
         )
 
-    left_origin = (-6, 64, -2)
-    right_origin = (-2, 64, -2)
-    setup_blocks = _room_shell(left_origin, width=5, depth=5, height=3, block_id="minecraft:stone_bricks") + _room_shell(
-        right_origin,
-        width=5,
-        depth=5,
-        height=3,
+    room_width = 5
+    room_depth = 5
+    room_height = 3
+    axis = rng.choice(["x", "z"])
+    share_wall = rng.choice([True, False])
+    first_origin = (rng.randint(-8, -2), 64, rng.randint(-8, -2))
+    gap = room_width - 1 if share_wall else room_width + rng.choice([1, 2, 3])
+    if axis == "x":
+        second_origin = (first_origin[0] + gap, 64, first_origin[2])
+    else:
+        second_origin = (first_origin[0], 64, first_origin[2] + gap)
+    setup_blocks = _room_shell(
+        first_origin,
+        width=room_width,
+        depth=room_depth,
+        height=room_height,
+        block_id="minecraft:stone_bricks",
+    ) + _room_shell(
+        second_origin,
+        width=room_width,
+        depth=room_depth,
+        height=room_height,
         block_id="minecraft:stone_bricks",
     )
-    prompt = "Two stone_bricks rooms are adjacent and touch each other. Do they share a wall?"
+    prompt = "Two stone_bricks rooms are nearby. Do they share a wall?"
+    expected_answer = "yes" if share_wall else "no"
     return TextQATaskSpec(
         task_id=_task_id("qa_topology", seed, family, index),
         tier="qa_topology",
@@ -465,20 +503,26 @@ def _build_topology(*, seed: int, index: int, rng: random.Random) -> TextQATaskS
         seed=seed,
         prompt=prompt,
         setup_blocks=setup_blocks,
-        expected_answer="yes",
+        expected_answer=expected_answer,
         answer_format="yes_no",
         canonical_reasoning=[
-            "Adjacent rooms that touch along a full face share wall coordinates.",
-            "These two rooms touch along one side, so they share a wall.",
-            "The correct answer is yes.",
+            "Rooms share a wall only when their wall coordinates overlap on one face.",
+            (
+                "These two rooms touch along one face, so they share a wall."
+                if share_wall
+                else "There is a gap between the rooms, so their wall coordinates do not overlap."
+            ),
+            f"The correct answer is {expected_answer}.",
         ],
         metadata={
-            "left_room_origin": {"x": left_origin[0], "y": left_origin[1], "z": left_origin[2]},
-            "right_room_origin": {"x": right_origin[0], "y": right_origin[1], "z": right_origin[2]},
-            "room_width": 5,
-            "room_depth": 5,
-            "room_height": 3,
+            "left_room_origin": {"x": first_origin[0], "y": first_origin[1], "z": first_origin[2]},
+            "right_room_origin": {"x": second_origin[0], "y": second_origin[1], "z": second_origin[2]},
+            "room_width": room_width,
+            "room_depth": room_depth,
+            "room_height": room_height,
             "wall_block_id": "minecraft:stone_bricks",
+            "share_wall": share_wall,
+            "axis": axis,
         },
     )
 

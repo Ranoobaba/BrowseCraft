@@ -43,6 +43,29 @@ def test_multi_hop_chain_records_hop_count_and_final_answer() -> None:
     assert response.endswith(f"Answer: {task.expected_answer}")
 
 
+def test_topology_tasks_vary_world_geometry() -> None:
+    geometries = set()
+    for index in range(80):
+        task = generate_text_qa_task(tier="qa_topology", seed=17, index=index)
+        coords = tuple(sorted((block.x, block.y, block.z, block.block_id) for block in task.setup_blocks))
+        geometries.add((task.family, coords))
+        if len(geometries) >= 4:
+            break
+    assert len(geometries) >= 4
+
+
+def test_shared_wall_topology_generates_yes_and_no_cases() -> None:
+    answers = set()
+    for index in range(200):
+        task = generate_text_qa_task(tier="qa_topology", seed=23, index=index)
+        if task.family != "shared_wall_yes_no":
+            continue
+        answers.add(task.expected_answer)
+        if answers == {"yes", "no"}:
+            break
+    assert answers == {"yes", "no"}
+
+
 def test_text_qa_jsonl_round_trip(tmp_path) -> None:
     tasks = generate_text_qa_tasks(seed=21, per_tier=1)
     path = tmp_path / "text_qa.jsonl"
