@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from browsecraft_sim.rl.curriculum import (
+    bootstrap_family_success_rates,
     bootstrap_success_rates,
     curriculum_weights,
+    rolling_family_success_rates,
     rolling_tier_success_rates,
     weighted_task_counts,
 )
@@ -31,6 +33,14 @@ def test_curriculum_weights_double_only_mid_band_tiers() -> None:
     }
 
 
+def test_rolling_family_success_rates_uses_task_id_family_key() -> None:
+    rows = [{"task_id": "t5_modification:add_window_to_wall:7:0", "reward_binary": 0.0} for _ in range(20)]
+    rows.extend({"task_id": "t5_modification:add_window_to_wall:7:0", "reward_binary": 1.0} for _ in range(60))
+    rows.extend({"task_id": "t5_modification:add_window_to_wall:7:0", "reward_binary": 0.0} for _ in range(40))
+    rates = rolling_family_success_rates(rows, window_size=100)
+    assert rates["t5_modification:add_window_to_wall"] == 0.6
+
+
 def test_weighted_task_counts_allocate_more_to_double_weight_tier() -> None:
     counts = weighted_task_counts(
         total_tasks=8,
@@ -54,3 +64,15 @@ def test_bootstrap_success_rates_fill_missing_selected_tiers(tmp_path) -> None:
         "t5_modification": 0.55,
         "t6_composition": 0.5,
     }
+
+
+def test_bootstrap_family_success_rates_reads_episode_csv(tmp_path) -> None:
+    episodes = tmp_path / "baseline_episodes_test.csv"
+    episodes.write_text(
+        "task_id,reward_binary\n"
+        "t5_modification:add_window_to_wall:7:0,0\n"
+        "t5_modification:add_window_to_wall:7:1,1\n",
+        encoding="utf-8",
+    )
+    rates = bootstrap_family_success_rates(runs_dir=tmp_path)
+    assert rates["t5_modification:add_window_to_wall"] == 0.5

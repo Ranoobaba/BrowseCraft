@@ -19,6 +19,7 @@ class RawTrajectoryInput(BaseModel):
     reward_raw: float
     reward_normalized: float = Field(ge=0.0, le=1.0)
     reward_binary: float = Field(ge=0.0, le=1.0)
+    usage: dict[str, int] = Field(default_factory=dict)
 
 
 def _read_raw_inputs(path: Path) -> list[RawTrajectoryInput]:

@@ -13,7 +13,13 @@ from typing import Any
 from anthropic import AsyncAnthropic
 
 from browsecraft_sim.rl.config import RewardConfig
-from browsecraft_sim.rl.curriculum import bootstrap_success_rates, curriculum_weights, rolling_tier_success_rates
+from browsecraft_sim.rl.curriculum import (
+    bootstrap_family_success_rates,
+    bootstrap_success_rates,
+    curriculum_weights,
+    rolling_family_success_rates,
+    rolling_tier_success_rates,
+)
 from browsecraft_sim.rl.grader import grade_task
 from browsecraft_sim.rl.task_generator import generate_task, generate_tasks
 from browsecraft_sim.rl.trajectory import validate_anthropic_messages
@@ -393,11 +399,16 @@ async def _run(args: argparse.Namespace) -> list[dict[str, Any]]:
             tiers=tiers,
             threshold=args.curriculum_threshold,
         )
+        bootstrap_family_rates = bootstrap_family_success_rates(
+            runs_dir=args.curriculum_runs_dir,
+            threshold=args.curriculum_threshold,
+        )
         sampling_summary = {
             "strategy": "curriculum",
             "tiers": tiers,
             "total_tasks": total_tasks,
             "bootstrap_source": bootstrap_source,
+            "bootstrap_family_success_rates": bootstrap_family_rates,
             "bootstrap_success_rates": bootstrap_rates,
             "initial_weights": weights,
             "update_every": args.curriculum_update_every,
@@ -484,9 +495,21 @@ async def _run(args: argparse.Namespace) -> list[dict[str, Any]]:
                             threshold=args.curriculum_threshold,
                             window_size=args.curriculum_update_every,
                         )
+                        family_success_rates = rolling_family_success_rates(
+                            [
+                                {
+                                    "task_id": row["trace"]["task_id"],
+                                    "reward_binary": row["reward_binary"],
+                                }
+                                for row in rows
+                            ],
+                            window_size=args.curriculum_update_every,
+                            threshold=args.curriculum_threshold,
+                        )
                         sampling_summary["updates"].append(
                             {
                                 "completed_episodes": completed,
+                                "family_success_rates": family_success_rates,
                                 "success_rates": success_rates,
                                 "weights": dict(weights),
                             }
@@ -505,6 +528,17 @@ async def _run(args: argparse.Namespace) -> list[dict[str, Any]]:
                             flush=True,
                         )
             sampling_summary["final_weights"] = dict(weights)
+            sampling_summary["final_family_success_rates"] = rolling_family_success_rates(
+                [
+                    {
+                        "task_id": row["trace"]["task_id"],
+                        "reward_binary": row["reward_binary"],
+                    }
+                    for row in rows
+                ],
+                window_size=args.curriculum_update_every,
+                threshold=args.curriculum_threshold,
+            )
         args._sampling_summary = sampling_summary
         return rows
     finally:

@@ -20,6 +20,35 @@ def _row_reward(row: dict[str, Any]) -> float:
     raise KeyError("row is missing reward, reward_binary, and reward_normalized")
 
 
+def _task_family_key(row: dict[str, Any]) -> str:
+    task_id = str(row["task_id"])
+    tier, family, _, _ = task_id.split(":", 3)
+    return f"{tier}:{family}"
+
+
+def _rolling_success_rates(
+    rows: Sequence[dict[str, Any]],
+    *,
+    key_fn,
+    window_size: int,
+    threshold: float,
+    selected_keys: set[str],
+) -> dict[str, float]:
+    grouped: dict[str, list[bool]] = defaultdict(list)
+    for row in rows:
+        key = key_fn(row)
+        if selected_keys and key not in selected_keys:
+            continue
+        grouped[key].append(reward_to_success(_row_reward(row), threshold=threshold))
+
+    rates: dict[str, float] = {}
+    for key, outcomes in grouped.items():
+        recent = outcomes[-window_size:]
+        if recent:
+            rates[key] = sum(1 for outcome in recent if outcome) / len(recent)
+    return rates
+
+
 def rolling_tier_success_rates(
     rows: Sequence[dict[str, Any]],
     *,
@@ -27,21 +56,29 @@ def rolling_tier_success_rates(
     threshold: float = 0.8,
     tiers: Iterable[str] | None = None,
 ) -> dict[str, float]:
-    selected_tiers = set(tiers or ())
-    grouped: dict[str, list[bool]] = defaultdict(list)
-    for row in rows:
-        tier = str(row["tier"])
-        if selected_tiers and tier not in selected_tiers:
-            continue
-        grouped[tier].append(reward_to_success(_row_reward(row), threshold=threshold))
+    return _rolling_success_rates(
+        rows,
+        key_fn=lambda row: str(row["tier"]),
+        window_size=window_size,
+        threshold=threshold,
+        selected_keys=set(tiers or ()),
+    )
 
-    rates: dict[str, float] = {}
-    for tier, outcomes in grouped.items():
-        recent = outcomes[-window_size:]
-        if not recent:
-            continue
-        rates[tier] = sum(1 for outcome in recent if outcome) / len(recent)
-    return rates
+
+def rolling_family_success_rates(
+    rows: Sequence[dict[str, Any]],
+    *,
+    window_size: int = 100,
+    threshold: float = 0.8,
+    families: Iterable[str] | None = None,
+) -> dict[str, float]:
+    return _rolling_success_rates(
+        rows,
+        key_fn=_task_family_key,
+        window_size=window_size,
+        threshold=threshold,
+        selected_keys=set(families or ()),
+    )
 
 
 def curriculum_weights(
@@ -105,3 +142,19 @@ def bootstrap_success_rates(
     for tier in selected_tiers:
         rates.setdefault(tier, 0.5)
     return rates
+
+
+def bootstrap_family_success_rates(
+    *,
+    runs_dir: str | Path,
+    families: Iterable[str] | None = None,
+    threshold: float = 0.8,
+) -> dict[str, float]:
+    runs_path = Path(runs_dir)
+    selected_families = set(families or ())
+    episode_files = sorted(runs_path.glob("baseline_episodes*.csv"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not episode_files:
+        return {}
+    with episode_files[0].open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    return rolling_family_success_rates(rows, threshold=threshold, families=selected_families or None)

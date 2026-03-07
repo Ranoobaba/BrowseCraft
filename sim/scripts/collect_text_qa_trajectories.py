@@ -15,13 +15,15 @@ from browsecraft_sim.rl.text_qa import (
     TextQATrajectoryRecord,
     generate_text_qa_tasks,
     grade_text_qa_answer,
+    text_qa_full_prompt,
 )
 from browsecraft_sim.rl.trajectory import validate_anthropic_messages
 
 
 _SYSTEM_PROMPT = (
     "You answer spatial reasoning questions about a Minecraft-like world.\n"
-    "Read the user prompt carefully, reason step by step internally, and answer with the final answer only.\n"
+    "Read the user prompt carefully, reason step by step internally, and respond with exactly one line in the form "
+    "`Answer: <final answer>`.\n"
     "Do not invent entities that are not described."
 )
 _CACHE_CONTROL_EPHEMERAL = {"type": "ephemeral"}
@@ -56,7 +58,8 @@ async def _run_task(
     model: str,
 ) -> dict[str, Any]:
     started_at = datetime.now(UTC)
-    messages = [{"role": "user", "content": [{"type": "text", "text": task.prompt}]}]
+    full_prompt = text_qa_full_prompt(task)
+    messages = [{"role": "user", "content": [{"type": "text", "text": full_prompt}]}]
     response = await client.messages.create(
         model=model,
         max_tokens=256,
@@ -77,7 +80,7 @@ async def _run_task(
         model=model,
         system_prompt=_SYSTEM_PROMPT,
         messages=validated_messages,
-        prompt=task.prompt,
+        prompt=full_prompt,
         answer=answer,
         expected_answer=task.expected_answer,
         answer_format=task.answer_format,

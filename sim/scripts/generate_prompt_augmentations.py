@@ -21,10 +21,21 @@ from browsecraft_sim.rl.augmentation import (
 from browsecraft_sim.rl.prompt_variants import write_prompt_variants_jsonl
 from browsecraft_sim.rl.task_generator import generate_tasks
 from browsecraft_sim.rl.text_qa import generate_text_qa_tasks, write_text_qa_jsonl
+from browsecraft_sim.rl.types import ALL_TIERS, Tier
+
+
+def _parse_tiers(raw: str | None) -> list[Tier] | None:
+    if raw is None or not raw.strip():
+        return None
+    tiers = [item.strip() for item in raw.split(",") if item.strip()]
+    invalid = [tier for tier in tiers if tier not in ALL_TIERS]
+    if invalid:
+        raise ValueError(f"unsupported tiers: {', '.join(invalid)}")
+    return tiers  # type: ignore[return-value]
 
 
 async def _run_paraphrases(args: argparse.Namespace) -> None:
-    tasks = generate_tasks(seed=args.seed, per_tier=args.per_tier)
+    tasks = generate_tasks(seed=args.seed, per_tier=args.per_tier, tiers=_parse_tiers(args.tiers))
     client = AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     try:
         requests = [
@@ -41,13 +52,12 @@ async def _run_paraphrases(args: argparse.Namespace) -> None:
         paraphrase_outputs = await read_batch_results(client, message_batch_id=created_batch.id)
 
         verification_requests = []
-        task_by_id = {task.task_id: task for task in tasks}
+        task_by_seed = {task.seed: task for task in tasks}
         for custom_id, text in paraphrase_outputs.items():
-            prefix, suffix = custom_id.split(":", maxsplit=1)
-            if prefix != "paraphrase":
+            if not custom_id.startswith("paraphrase_"):
                 raise ValueError(f"unexpected paraphrase custom id: {custom_id}")
-            task_id, variant_index = suffix.rsplit(":", maxsplit=1)
-            task = task_by_id[task_id]
+            _, task_seed, variant_index = custom_id.rsplit("_", maxsplit=2)
+            task = task_by_seed[int(task_seed)]
             try:
                 payload = parse_json_payload(text)
             except ValueError:
@@ -93,7 +103,7 @@ async def _run_paraphrases(args: argparse.Namespace) -> None:
 async def _run_world_qa(args: argparse.Namespace) -> None:
     source = args.qa_source
     if source == "build":
-        source_tasks = generate_tasks(seed=args.seed, per_tier=args.per_tier)
+        source_tasks = generate_tasks(seed=args.seed, per_tier=args.per_tier, tiers=_parse_tiers(args.tiers))
     else:
         source_tasks = generate_text_qa_tasks(seed=args.seed, per_tier=args.per_tier)
 
@@ -123,6 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default="claude-haiku-4-5")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--per-tier", type=int, default=4)
+    parser.add_argument("--tiers", default=None)
     parser.add_argument("--qa-source", choices=("build", "text_qa"), default="text_qa")
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--paraphrase-output", default="runs/verified_paraphrases.jsonl")

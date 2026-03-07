@@ -8,13 +8,21 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from browsecraft_sim.rl.curriculum import (
+    bootstrap_family_success_rates,
     bootstrap_success_rates,
     curriculum_weights,
+    rolling_family_success_rates,
     rolling_tier_success_rates,
     weighted_task_counts,
 )
 from browsecraft_sim.rl.prompt_variants import read_prompt_variants_jsonl
-from browsecraft_sim.rl.text_qa import canonical_text_qa_response, generate_text_qa_tasks, read_text_qa_jsonl
+from browsecraft_sim.rl.text_qa import (
+    canonical_text_qa_response,
+    generate_text_qa_tasks,
+    read_text_qa_jsonl,
+    read_text_qa_trajectory_jsonl,
+    text_qa_full_prompt,
+)
 from browsecraft_sim.rl.trajectory import EpisodeTrajectoryRecord, read_trajectory_jsonl
 
 
@@ -47,16 +55,28 @@ def _clone_messages_with_prompt(messages: list[dict[str, Any]], prompt: str) -> 
     raise ValueError("expected first user message to contain a text block")
 
 
+def _first_user_prompt(messages: list[dict[str, Any]]) -> str:
+    first = messages[0]
+    if first["role"] != "user" or not first["content"]:
+        raise ValueError("expected first message to be a user prompt")
+    for block in first["content"]:
+        if block["type"] == "text":
+            return str(block["text"])
+    raise ValueError("expected first user message to contain a text block")
+
+
 def _build_sft_records(
     *,
     build_trajectories: list[EpisodeTrajectoryRecord],
     paraphrase_cache_path: str | None,
+    text_qa_trajectories_path: str | None,
     text_qa_seed: int,
     text_qa_per_tier: int,
     verified_qa_cache_path: str | None,
 ) -> list[StageManifestRecord]:
     records: list[StageManifestRecord] = []
     paraphrases_by_task: dict[str, list[str]] = {}
+    seen_build_prompts: set[tuple[str, str]] = set()
     if paraphrase_cache_path is not None:
         for record in read_prompt_variants_jsonl(paraphrase_cache_path):
             paraphrases_by_task[record.task_id] = record.verified_paraphrases
@@ -72,6 +92,11 @@ def _build_sft_records(
         prompt_variants = [None, *paraphrases_by_task.get(record.task_id, [])]
         for prompt_variant in prompt_variants:
             messages = base_messages if prompt_variant is None else _clone_messages_with_prompt(base_messages, prompt_variant)
+            prompt_text = _first_user_prompt(messages)
+            prompt_key = (record.task_id, prompt_text)
+            if prompt_key in seen_build_prompts:
+                continue
+            seen_build_prompts.add(prompt_key)
             records.append(
                 StageManifestRecord(
                     stage="sft_stage1",
@@ -87,12 +112,36 @@ def _build_sft_records(
                 )
             )
 
+    successful_text_qa_task_ids: set[str] = set()
+    if text_qa_trajectories_path is not None:
+        for record in read_text_qa_trajectory_jsonl(text_qa_trajectories_path):
+            if record.reward_binary < 1.0:
+                continue
+            successful_text_qa_task_ids.add(record.task_id)
+            records.append(
+                StageManifestRecord(
+                    stage="sft_stage1",
+                    task_mode="text_qa",
+                    input={"system_prompt": record.system_prompt, "messages": record.messages},
+                    metadata={
+                        "task_id": record.task_id,
+                        "tier": record.tier,
+                        "source": "text_qa_trajectory",
+                        "answer_format": record.answer_format,
+                        "model": record.model,
+                        "reward_binary": record.reward_binary,
+                    },
+                )
+            )
+
     text_qa_tasks = generate_text_qa_tasks(seed=text_qa_seed, per_tier=text_qa_per_tier)
     if verified_qa_cache_path is not None:
         text_qa_tasks.extend(read_text_qa_jsonl(verified_qa_cache_path))
 
     seen_text_qa_keys: set[tuple[str, str]] = set()
     for task in text_qa_tasks:
+        if task.task_id in successful_text_qa_task_ids:
+            continue
         key = (task.prompt, task.expected_answer)
         if key in seen_text_qa_keys:
             continue
@@ -104,7 +153,7 @@ def _build_sft_records(
                 input={
                     "system_prompt": "You answer spatial reasoning questions about a Minecraft-like world.",
                     "messages": [
-                        {"role": "user", "content": [{"type": "text", "text": task.prompt}]},
+                        {"role": "user", "content": [{"type": "text", "text": text_qa_full_prompt(task)}]},
                         {"role": "assistant", "content": [{"type": "text", "text": canonical_text_qa_response(task)}]},
                     ],
                 },
@@ -135,9 +184,13 @@ def _build_grpo_records(
         runs_dir=runs_dir,
         tiers=("t4_structure_relative", "t5_modification", "t6_composition"),
     )
+    bootstrap_family_rates = bootstrap_family_success_rates(runs_dir=runs_dir)
     trajectory_rates = rolling_tier_success_rates(
         [{"tier": record.tier, "reward_binary": record.reward_binary} for record in eligible],
         tiers=("t4_structure_relative", "t5_modification", "t6_composition"),
+    )
+    trajectory_family_rates = rolling_family_success_rates(
+        [{"task_id": record.task_id, "reward_binary": record.reward_binary} for record in eligible]
     )
     success_rates = dict(bootstrap_rates)
     success_rates.update(trajectory_rates)
@@ -176,7 +229,9 @@ def _build_grpo_records(
         for record in selected
     ]
     curriculum = {
+        "bootstrap_family_success_rates": bootstrap_family_rates,
         "bootstrap_success_rates": bootstrap_rates,
+        "trajectory_family_success_rates": trajectory_family_rates,
         "trajectory_success_rates": trajectory_rates,
         "effective_success_rates": success_rates,
         "weights": weights,
@@ -192,6 +247,7 @@ def run(
     sft_output: Path,
     grpo_output: Path,
     paraphrase_cache_path: str | None,
+    text_qa_trajectories_path: str | None,
     verified_qa_cache_path: str | None,
     text_qa_seed: int,
     text_qa_per_tier: int,
@@ -203,6 +259,7 @@ def run(
     sft_records = _build_sft_records(
         build_trajectories=build_trajectories,
         paraphrase_cache_path=paraphrase_cache_path,
+        text_qa_trajectories_path=text_qa_trajectories_path,
         text_qa_seed=text_qa_seed,
         text_qa_per_tier=text_qa_per_tier,
         verified_qa_cache_path=verified_qa_cache_path,
@@ -240,6 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sft-output", required=True)
     parser.add_argument("--grpo-output", required=True)
     parser.add_argument("--paraphrase-cache", default=None)
+    parser.add_argument("--text-qa-trajectories", default=None)
     parser.add_argument("--verified-qa-cache", default=None)
     parser.add_argument("--text-qa-seed", type=int, default=7)
     parser.add_argument("--text-qa-per-tier", type=int, default=4)
@@ -256,6 +314,7 @@ def main() -> None:
         sft_output=Path(args.sft_output).resolve(),
         grpo_output=Path(args.grpo_output).resolve(),
         paraphrase_cache_path=args.paraphrase_cache,
+        text_qa_trajectories_path=args.text_qa_trajectories,
         verified_qa_cache_path=args.verified_qa_cache,
         text_qa_seed=int(args.text_qa_seed),
         text_qa_per_tier=int(args.text_qa_per_tier),

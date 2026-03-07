@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from typing import Any, Literal, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .prompt_variants import PromptVariantRecord
 from .spatial_worlds import player_relative_direction as _player_relative_direction
@@ -23,7 +23,7 @@ _PARAPHRASE_VERIFY_SYSTEM_PROMPT = (
 )
 _WORLD_QA_SYSTEM_PROMPT = (
     "You generate Minecraft spatial QA tasks from a world snapshot.\n"
-    "Use only the supported question types and return JSON only."
+    "Use only the supported question types, do not invent unsupported entities, and return plain JSON only."
 )
 _ENTITY_NAMES = {
     "minecraft:red_wool": "red marker",
@@ -48,17 +48,25 @@ class WorldQACandidatePayload(BaseModel):
         "inside_enclosure",
         "shared_wall_yes_no",
     ]
-    prompt: str = Field(min_length=1)
-    expected_answer: str = Field(min_length=1)
+    prompt: str = Field(min_length=1, validation_alias=AliasChoices("prompt", "question"))
+    expected_answer: str = Field(min_length=1, validation_alias=AliasChoices("expected_answer", "answer"))
     answer_format: AnswerFormat
     canonical_reasoning: list[str] = Field(min_length=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("canonical_reasoning", mode="before")
+    @classmethod
+    def _normalize_reasoning(cls, value: Any) -> list[str]:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return [stripped] if stripped else []
+        return value
 
 
 class WorldQACandidateBatchPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    candidates: list[WorldQACandidatePayload] = Field(min_length=1, max_length=5)
+    candidates: list[WorldQACandidatePayload] = Field(min_length=0, max_length=5)
 
 
 def task_canonical_intent(task: TaskSpec) -> dict[str, Any]:
@@ -69,7 +77,15 @@ def task_canonical_intent(task: TaskSpec) -> dict[str, Any]:
 
 
 def parse_json_payload(text: str) -> dict[str, Any]:
-    payload = json.loads(text)
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    payload = json.loads(stripped)
     if not isinstance(payload, dict):
         raise ValueError("expected JSON object response")
     return payload
@@ -92,7 +108,7 @@ def paraphrase_request(task: TaskSpec, *, variant_index: int, model: str) -> dic
         'Return JSON with exactly one key: {"paraphrase": "..."}'
     )
     return {
-        "custom_id": f"paraphrase:{task.task_id}:{variant_index}",
+        "custom_id": f"paraphrase_{task.seed}_{variant_index}",
         "params": {
             "model": model,
             "max_tokens": 256,
@@ -111,7 +127,7 @@ def paraphrase_verify_request(task: TaskSpec, *, paraphrase: str, variant_index:
         "Return JSON only."
     )
     return {
-        "custom_id": f"paraphrase-verify:{task.task_id}:{variant_index}",
+        "custom_id": f"paraphrase_verify_{task.seed}_{variant_index}",
         "params": {
             "model": model,
             "max_tokens": 512,
@@ -129,15 +145,21 @@ def world_qa_request(task: TaskSpec | TextQATaskSpec, *, model: str) -> dict[str
         "setup_blocks": [block.model_dump(mode="json") for block in task.setup_blocks],
     }
     prompt = (
-        "Given this world snapshot, generate exactly five candidate spatial QA tasks.\n"
-        "Supported question_type values are: furthest_north_marker, marker_chain, "
-        "player_relative_marker, inside_enclosure, shared_wall_yes_no.\n"
-        "Each candidate must include prompt, expected_answer, answer_format, canonical_reasoning, and metadata.\n"
+        "Given this world snapshot, generate up to five candidate spatial QA tasks that are fully supported by the world.\n"
+        "Do not invent markers, rooms, enclosures, or chains that are not present. If a question type is unsupported, omit it.\n"
+        "Return plain JSON only, with no markdown fences.\n"
+        "Supported question types and required shapes:\n"
+        "- furthest_north_marker: answer_format must be entity_name; metadata must contain entity_block_ids as a list of block ids present as single markers.\n"
+        "- marker_chain: answer_format must be entity_name; metadata must contain start_entity, steps (north/south/east/west), and step_distance.\n"
+        "- player_relative_marker: answer_format must be entity_name; metadata must contain target_direction (front/behind/left/right).\n"
+        "- inside_enclosure: answer_format must be entity_name or coordinate; ask which entity or coordinate is inside the enclosure.\n"
+        "- shared_wall_yes_no: answer_format must be yes_no; ask whether the two rooms share a wall.\n"
+        "canonical_reasoning must be a JSON array of short strings.\n"
         f"World JSON: {json.dumps(world_payload, sort_keys=True)}\n"
         'Return JSON as {"candidates": [...]} with at most five candidates.'
     )
     return {
-        "custom_id": f"world-qa:{task.task_id}",
+        "custom_id": f"world_qa_{task.seed}",
         "params": {
             "model": model,
             "max_tokens": 1024,
@@ -154,26 +176,31 @@ def verified_paraphrase_records(
     paraphrase_outputs: dict[str, str],
     verification_outputs: dict[str, str],
 ) -> list[PromptVariantRecord]:
-    task_by_id = {task.task_id: task for task in tasks}
+    task_by_seed = {task.seed: task for task in tasks}
     grouped: dict[str, list[str]] = defaultdict(list)
     for custom_id, paraphrase_text in paraphrase_outputs.items():
-        prefix, suffix = custom_id.split(":", maxsplit=1)
-        if prefix != "paraphrase":
+        if not custom_id.startswith("paraphrase_"):
             raise ValueError(f"unexpected paraphrase custom id: {custom_id}")
-        task_id, variant_index = suffix.rsplit(":", maxsplit=1)
-        verification_key = f"paraphrase-verify:{task_id}:{variant_index}"
+        _, task_seed, variant_index = custom_id.rsplit("_", maxsplit=2)
+        verification_key = f"paraphrase_verify_{task_seed}_{variant_index}"
         verification_text = verification_outputs.get(verification_key)
-        task = task_by_id.get(task_id)
+        task = task_by_seed.get(int(task_seed))
         if verification_text is None or task is None:
             continue
-        extracted = parse_json_payload(verification_text)
+        try:
+            extracted = parse_json_payload(verification_text)
+        except ValueError:
+            continue
         if not verify_paraphrase_intent(task, extracted):
             continue
-        payload = parse_json_payload(paraphrase_text)
+        try:
+            payload = parse_json_payload(paraphrase_text)
+        except ValueError:
+            continue
         paraphrase = payload.get("paraphrase")
         if not isinstance(paraphrase, str) or not paraphrase.strip():
             continue
-        grouped[task_id].append(paraphrase.strip())
+        grouped[task.task_id].append(paraphrase.strip())
 
     return [
         PromptVariantRecord(
@@ -485,11 +512,13 @@ def verified_world_qa_candidates(
     source_tasks: Sequence[TaskSpec | TextQATaskSpec],
     batch_outputs: dict[str, str],
 ) -> list[TextQATaskSpec]:
-    task_by_id = {task.task_id: task for task in source_tasks}
+    task_by_seed = {task.seed: task for task in source_tasks}
     verified: list[TextQATaskSpec] = []
     for custom_id, text in batch_outputs.items():
-        _, task_id = custom_id.split(":", maxsplit=1)
-        task = task_by_id.get(task_id)
+        if not custom_id.startswith("world_qa_"):
+            raise ValueError(f"unexpected world QA custom id: {custom_id}")
+        task_seed = custom_id.removeprefix("world_qa_")
+        task = task_by_seed.get(int(task_seed))
         if task is None:
             continue
         try:

@@ -100,8 +100,11 @@ def test_export_stage_manifests_builds_sft_and_weighted_grpo_outputs(tmp_path) -
                 family="absolute_single_block",
                 seed=7,
                 original_prompt="Place one minecraft:stone block at absolute coordinates (x=1, y=64, z=2).",
-                verified_paraphrases=["Put a single stone block at x 1, y 64, z 2."],
-                shortfall=2,
+                verified_paraphrases=[
+                    "Put a single stone block at x 1, y 64, z 2.",
+                    "Put a single stone block at x 1, y 64, z 2.",
+                ],
+                shortfall=1,
             )
         ],
     )
@@ -130,6 +133,7 @@ def test_export_stage_manifests_builds_sft_and_weighted_grpo_outputs(tmp_path) -
         sft_output=sft_output,
         grpo_output=grpo_output,
         paraphrase_cache_path=str(paraphrases_path),
+        text_qa_trajectories_path=None,
         verified_qa_cache_path=str(verified_qa_cache_path),
         text_qa_seed=13,
         text_qa_per_tier=1,
@@ -161,3 +165,4 @@ def test_export_stage_manifests_builds_sft_and_weighted_grpo_outputs(tmp_path) -
 
     curriculum = json.loads(curriculum_output.read_text(encoding="utf-8"))
     assert curriculum["weights"]["t5_modification"] == 2
+    assert curriculum["trajectory_family_success_rates"]["t5_modification:add_window_to_wall"] == 0.0

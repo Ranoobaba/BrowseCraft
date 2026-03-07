@@ -1,5 +1,12 @@
 from .config import RewardConfig, load_reward_config
-from .curriculum import bootstrap_success_rates, curriculum_weights, rolling_tier_success_rates, weighted_task_counts
+from .curriculum import (
+    bootstrap_family_success_rates,
+    bootstrap_success_rates,
+    curriculum_weights,
+    rolling_family_success_rates,
+    rolling_tier_success_rates,
+    weighted_task_counts,
+)
 from .grader import grade_task
 from .reward import binary_reward, compose_reward
 from .task_generator import generate_task, generate_tasks, sample_weighted_tasks, tier_counts
@@ -13,6 +20,7 @@ __all__ = [
     "TaskSpec",
     "TextQATaskSpec",
     "binary_reward",
+    "bootstrap_family_success_rates",
     "bootstrap_success_rates",
     "compose_reward",
     "curriculum_weights",
@@ -23,6 +31,7 @@ __all__ = [
     "grade_task",
     "grade_text_qa_answer",
     "load_reward_config",
+    "rolling_family_success_rates",
     "rolling_tier_success_rates",
     "sample_weighted_tasks",
     "tier_counts",

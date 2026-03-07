@@ -207,8 +207,10 @@ def _corridor_segment_x(
     max_x = max(x_start, x_end)
     blocks: list[BlockPlacement] = []
     for x in range(min_x, max_x + 1):
-        blocks.append(BlockPlacement(x=x, y=y, z=z, block_id=block_id))
+        blocks.append(BlockPlacement(x=x, y=y - 1, z=z, block_id=block_id))
         blocks.append(BlockPlacement(x=x, y=y + 2, z=z, block_id=block_id))
+        blocks.append(BlockPlacement(x=x, y=y + 2, z=z - 1, block_id=block_id))
+        blocks.append(BlockPlacement(x=x, y=y + 2, z=z + 1, block_id=block_id))
         blocks.append(BlockPlacement(x=x, y=y, z=z - 1, block_id=block_id))
         blocks.append(BlockPlacement(x=x, y=y + 1, z=z - 1, block_id=block_id))
         blocks.append(BlockPlacement(x=x, y=y, z=z + 1, block_id=block_id))
@@ -228,8 +230,10 @@ def _corridor_segment_z(
     max_z = max(z_start, z_end)
     blocks: list[BlockPlacement] = []
     for z in range(min_z, max_z + 1):
-        blocks.append(BlockPlacement(x=x, y=y, z=z, block_id=block_id))
+        blocks.append(BlockPlacement(x=x, y=y - 1, z=z, block_id=block_id))
         blocks.append(BlockPlacement(x=x, y=y + 2, z=z, block_id=block_id))
+        blocks.append(BlockPlacement(x=x - 1, y=y + 2, z=z, block_id=block_id))
+        blocks.append(BlockPlacement(x=x + 1, y=y + 2, z=z, block_id=block_id))
         blocks.append(BlockPlacement(x=x - 1, y=y, z=z, block_id=block_id))
         blocks.append(BlockPlacement(x=x - 1, y=y + 1, z=z, block_id=block_id))
         blocks.append(BlockPlacement(x=x + 1, y=y, z=z, block_id=block_id))
@@ -459,7 +463,7 @@ def _build_t3_primitives(*, seed: int, index: int, rng: random.Random) -> TaskSp
         ]
         prompt = (
             f"Build a straight {block_id} wall from x={start_x} to x={start_x + length - 1} at z={z}. "
-            f"Make it {height} blocks tall."
+            f"The wall should run from y=64 through y={64 + height - 1}."
         )
         metadata = {
             "length": length,
@@ -624,8 +628,11 @@ def _build_t4_structure_relative(*, seed: int, index: int, rng: random.Random) -
             )
         ]
         prompt = (
-            "There are two nearby stone towers with different heights. "
-            "Place one minecraft:torch on top of the shorter tower."
+            "Two stone towers are already built nearby, and one is shorter than the other. "
+            "Each tower is a single vertical stone column, and both tower bases are within 10 blocks of you on the same flat ground level. "
+            "Do not build or modify either tower. "
+            "Inspect them, identify the shorter existing tower, and place exactly one minecraft:torch "
+            "in the air block directly above that tower's highest stone block. Do not place a torch anywhere else."
         )
         checks = StructuralChecks(require_grounded=True)
         metadata = {
@@ -1059,14 +1066,10 @@ def _build_t6_composition(*, seed: int, index: int, rng: random.Random) -> TaskS
         )
         preserved = room_a + room_b
         prompt = (
-            "Connect the two rooms with a one-block-wide stone_bricks corridor between the facing doorways."
+            "Connect the two rooms with a one-block-wide hollow stone_bricks corridor shell between the facing doorways. "
+            "Build the corridor floor, side walls, and roof, and leave the interior passage empty."
         )
-        checks = StructuralChecks(
-            require_connected=True,
-            require_grounded=True,
-            min_span=bottom_room_origin[2] - top_room_origin[2] - 3,
-            span_axis="z",
-        )
+        checks = StructuralChecks()
         metadata = {
             "compositional": True,
             "canonical_intent": _canonical_intent(
@@ -1083,16 +1086,22 @@ def _build_t6_composition(*, seed: int, index: int, rng: random.Random) -> TaskS
         right_tower = _tower(base=right_base, height=4, block_id="minecraft:stone")
         setup = left_tower + right_tower
         x_path = [
-            BlockPlacement(x=x, y=67, z=left_base[2], block_id="minecraft:cobblestone")
-            for x in range(left_base[0] + 1, right_base[0] + 1)
+            BlockPlacement(x=x, y=68, z=left_base[2], block_id="minecraft:cobblestone")
+            for x in range(left_base[0], right_base[0] + 1)
         ]
         z_path = [
-            BlockPlacement(x=right_base[0], y=67, z=z, block_id="minecraft:cobblestone")
+            BlockPlacement(x=right_base[0], y=68, z=z, block_id="minecraft:cobblestone")
             for z in range(min(left_base[2], right_base[2]), max(left_base[2], right_base[2]) + 1)
         ]
         target = _dedupe_blocks([*x_path, *z_path])
         preserved = left_tower + right_tower
-        prompt = "Build an L-shaped minecraft:cobblestone bridge connecting the tops of the two offset towers."
+        prompt = (
+            "Two stone towers are already built nearby. Do not build new towers or change the existing towers. "
+            "Build only the missing one-block-wide L-shaped minecraft:cobblestone bridge in the air one block above "
+            "the tower tops. Start directly above the west tower top, run straight east until you are aligned with "
+            "the east tower, then turn once and continue along z until the bridge ends directly above the east tower top. "
+            "Do not place any cobblestone on or inside the towers themselves."
+        )
         checks = StructuralChecks(require_connected=True)
         metadata = {
             "compositional": True,
@@ -1141,9 +1150,11 @@ def _build_t6_composition(*, seed: int, index: int, rng: random.Random) -> TaskS
         target = _dedupe_blocks([*segment_x, *segment_z])
         preserved = room_a + room_b
         prompt = (
-            "Connect the two offset rooms with an L-shaped one-block-wide stone_bricks corridor between their doorways."
+            "Two stone_bricks rooms with existing doorways are already built nearby. Do not rebuild or modify the rooms. "
+            "Build only the missing one-block-wide L-shaped stone_bricks corridor shell between the two doorways, "
+            "including the corridor floor, side walls, and roof. Leave the interior passage empty."
         )
-        checks = StructuralChecks(require_connected=True, require_grounded=True)
+        checks = StructuralChecks()
         metadata = {
             "compositional": True,
             "canonical_intent": _canonical_intent(

@@ -20,10 +20,10 @@ def test_verified_paraphrase_records_keep_tasks_with_zero_verified_outputs() -> 
     records = verified_paraphrase_records(
         tasks=[first, second],
         paraphrase_outputs={
-            f"paraphrase:{first.task_id}:0": json.dumps({"paraphrase": "Put the same block at the same coordinates."}),
+            f"paraphrase_{first.seed}_0": json.dumps({"paraphrase": "Put the same block at the same coordinates."}),
         },
         verification_outputs={
-            f"paraphrase-verify:{first.task_id}:0": json.dumps(first.metadata["canonical_intent"]),
+            f"paraphrase_verify_{first.seed}_0": json.dumps(first.metadata["canonical_intent"]),
         },
     )
 
@@ -45,7 +45,7 @@ def test_verified_world_qa_candidates_filter_unverifiable_outputs() -> None:
     source_task = generate_text_qa_task(tier="qa_directional_single_hop", seed=9, index=0)
     entity_block_ids = [block.block_id for block in source_task.setup_blocks]
     outputs = {
-        f"world-qa:{source_task.task_id}": json.dumps(
+        f"world_qa_{source_task.seed}": json.dumps(
             {
                 "candidates": [
                     {
@@ -101,7 +101,7 @@ def test_verified_world_qa_candidates_use_simulator_world_state(monkeypatch) -> 
 
     monkeypatch.setattr(augmentation, "build_world_from_setup", fake_build_world_from_setup)
     outputs = {
-        f"world-qa:{source_task.task_id}": json.dumps(
+        f"world_qa_{source_task.seed}": json.dumps(
             {
                 "candidates": [
                     {

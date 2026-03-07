@@ -2,17 +2,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
+import anyio
 from hud.cli.utils.lockfile import get_local_image, load_lock
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 from browsecraft_sim.rl.agent_config import AGENT_SYSTEM_PROMPT, ALLOWED_AGENT_TOOLS
 from browsecraft_sim.rl.config import load_reward_config
+from browsecraft_sim.rl.hud_env import ENV_NAME as SCENARIO_ENV_NAME
 from browsecraft_sim.rl.task_generator import generate_tasks, tier_counts
 from browsecraft_sim.rl.types import ALL_TIERS, Tier
 
 LOCAL_EVAL_FORMAT = "local-eval"
 V5_HUB_FORMAT = "v5-hub"
+DEFAULT_ENV_NAME = "browsecraft-spatial-rl"
+_HUD_MCP_URL = "https://api.hud.ai/v3/mcp/"
 
 
 def _parse_tiers(raw: str | None) -> list[Tier]:
@@ -32,7 +39,7 @@ def _task_record(
 ) -> dict[str, object]:
     return {
         "env": {"name": env_name},
-        "scenario": task_payload["tier"],
+        "scenario": f"{SCENARIO_ENV_NAME}:{task_payload['tier']}",
         "args": {"task_spec": task_payload, "reward_config": reward_config},
     }
 
@@ -94,6 +101,47 @@ def _resolve_local_image(*, output: Path, explicit_image: str | None) -> str:
     return image
 
 
+def _linked_deploy_registry_id(root: Path) -> str | None:
+    deploy_path = root / ".hud" / "deploy.json"
+    if not deploy_path.exists():
+        return None
+    payload = json.loads(deploy_path.read_text(encoding="utf-8"))
+    registry_id = payload.get("registryId")
+    if not isinstance(registry_id, str) or not registry_id:
+        raise ValueError(f"invalid registryId in {deploy_path}")
+    return registry_id
+
+
+async def _fetch_environment_name(environment_id: str) -> str:
+    api_key = os.environ.get("HUD_API_KEY")
+    if not api_key:
+        raise ValueError("HUD_API_KEY must be set to resolve the linked remote environment name")
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    async with streamablehttp_client(_HUD_MCP_URL, headers=headers) as streams:
+        read_stream, write_stream, _ = streams
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool("get_environment", {"environment_id": environment_id})
+            texts = [block.text for block in result.content if hasattr(block, "text")]
+            if len(texts) != 1:
+                raise ValueError("expected exactly one text block from get_environment")
+            payload = json.loads(texts[0])
+            name = payload.get("name")
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"environment {environment_id} is missing a name")
+            return name
+
+
+def _resolve_remote_env_name(*, requested_name: str, root: Path) -> str:
+    registry_id = _linked_deploy_registry_id(root)
+    if registry_id is None:
+        return requested_name
+    if requested_name != DEFAULT_ENV_NAME:
+        return requested_name
+    return anyio.run(_fetch_environment_name, registry_id)
+
+
 def run(
     *,
     seed: int,
@@ -106,7 +154,13 @@ def run(
     image: str | None,
 ) -> None:
     tasks = generate_tasks(seed=seed, per_tier=per_tier, tiers=tiers)
+    root = Path(__file__).resolve().parents[1]
     resolved_image = _resolve_local_image(output=output, explicit_image=image) if task_format == LOCAL_EVAL_FORMAT else None
+    resolved_env_name = (
+        _resolve_remote_env_name(requested_name=env_name, root=root)
+        if task_format == V5_HUB_FORMAT
+        else env_name
+    )
     lines = []
     for task in tasks:
         payload = task.model_dump(mode="json")
@@ -118,7 +172,7 @@ def run(
                 reward_config=reward_config,
             )
         else:
-            record = _task_record(env_name=env_name, task_payload=payload, reward_config=reward_config)
+            record = _task_record(env_name=resolved_env_name, task_payload=payload, reward_config=reward_config)
         lines.append(json.dumps(record))
     output.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
@@ -130,6 +184,7 @@ def run(
         "total": len(tasks),
         "reward_config": reward_config,
         "task_format": task_format,
+        "env_name": resolved_env_name,
     }
     if resolved_image is not None:
         summary["image"] = resolved_image
@@ -141,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--per-tier", type=int, default=100)
     parser.add_argument("--tiers", default=None, help="Comma-separated list of tiers. Default: all tiers.")
-    parser.add_argument("--env-name", default="browsecraft-spatial-rl")
+    parser.add_argument("--env-name", default=DEFAULT_ENV_NAME)
     parser.add_argument("--output", default="remote_tasks.jsonl")
     parser.add_argument("--format", choices=(V5_HUB_FORMAT, LOCAL_EVAL_FORMAT), default=V5_HUB_FORMAT)
     parser.add_argument("--image", default=None, help="Docker image for local-eval tasks.")

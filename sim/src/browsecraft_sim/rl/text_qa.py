@@ -109,9 +109,29 @@ def reconstruct_text_qa_task_from_task_id(task_id: str) -> TextQATaskSpec:
 
 def normalize_text_qa_answer(answer: str, answer_format: AnswerFormat) -> str:
     stripped = answer.strip().lower()
+    stripped = stripped.replace("**", "")
+    if "answer:" in stripped:
+        stripped = stripped.rsplit("answer:", maxsplit=1)[-1].strip()
+    if "\n" in stripped:
+        stripped = [line.strip() for line in stripped.splitlines() if line.strip()][-1]
     if answer_format in {"single_token", "entity_name", "yes_no"}:
+        stripped = stripped.replace("_", " ")
         stripped = stripped.replace("the ", "")
+        if stripped.endswith(" wool"):
+            stripped = stripped.removesuffix(" wool") + " marker"
         stripped = re.sub(r"\s+", " ", stripped)
+        stripped = stripped.rstrip(".")
+        if answer_format == "yes_no":
+            matches = re.findall(r"\b(?:yes|no)\b", stripped)
+            if matches:
+                return matches[-1]
+        if answer_format == "entity_name":
+            marker_matches = re.findall(
+                r"\b(?:red|blue|green|yellow|purple|orange|cyan|black|white) marker\b",
+                stripped,
+            )
+            if marker_matches:
+                return marker_matches[-1]
         return stripped
     if answer_format == "coordinate":
         numbers = [int(match) for match in re.findall(r"-?\d+", stripped)]
@@ -146,6 +166,75 @@ def canonical_text_qa_response(task: TextQATaskSpec) -> str:
     return f"{reasoning_lines}\nAnswer: {task.expected_answer}"
 
 
+def text_qa_full_prompt(task: TextQATaskSpec) -> str:
+    metadata = task.metadata
+    lines: list[str] = []
+
+    if task.family == "generated_world_candidate":
+        source_task_id = metadata.get("source_task_id")
+        if isinstance(source_task_id, str) and source_task_id.startswith("qa_"):
+            source_task = reconstruct_text_qa_task_from_task_id(source_task_id)
+            source_lines = text_qa_full_prompt(source_task).splitlines()
+            if source_lines and source_lines[-1].startswith("Question:"):
+                source_lines = source_lines[:-1]
+            return "\n".join([*source_lines, f"Question: {task.prompt}"])
+        return task.prompt
+    if task.family in {"furthest_cardinal_marker", "resolve_marker_chain"}:
+        entities = metadata["entities"]
+        lines.append("World state:")
+        for entity in entities:
+            lines.append(
+                f"- {entity['name']} is at ({entity['x']}, {entity['y']}, {entity['z']})."
+            )
+    elif task.family == "relative_to_player_marker":
+        block_by_coord = {(block.x, block.y, block.z): block.block_id for block in task.setup_blocks}
+        lines.append(
+            f"World state: the player is at ({task.player.x}, {task.player.y}, {task.player.z}) facing {task.player.facing}."
+        )
+        for direction, offset in metadata["world_offsets"].items():
+            coord = (task.player.x + offset["x"], task.player.y, task.player.z + offset["z"])
+            block_id = block_by_coord[coord]
+            lines.append(f"- {_marker_name(block_id)} is {direction} of the player at {coord}.")
+    elif task.family == "inside_enclosure":
+        origin = metadata["enclosure_origin"]
+        width = metadata["enclosure_width"]
+        depth = metadata["enclosure_depth"]
+        lines.append(
+            "World state: "
+            f"a stone_bricks enclosure starts at ({origin['x']}, {origin['y']}, {origin['z']}) "
+            f"with width {width} and depth {depth}."
+        )
+        grouped: dict[str, list[tuple[int, int, int]]] = {}
+        for block in task.setup_blocks:
+            grouped.setdefault(block.block_id, []).append((block.x, block.y, block.z))
+        for block_id in metadata["candidate_entity_block_ids"]:
+            coords = grouped[block_id]
+            base = min(coords)
+            lines.append(f"- {_marker_name(block_id)} tower base is at {base}.")
+    else:
+        first = metadata["left_room_origin"]
+        second = metadata["right_room_origin"]
+        lines.append(
+            "World state: "
+            f"room A starts at ({first['x']}, {first['y']}, {first['z']}) and "
+            f"room B starts at ({second['x']}, {second['y']}, {second['z']})."
+        )
+        lines.append(
+            f"Each room has width {metadata['room_width']}, depth {metadata['room_depth']}, and height {metadata['room_height']}."
+        )
+
+    noise = metadata.get("noise")
+    if isinstance(noise, dict) and noise.get("kind") == "tower":
+        base = noise["base"]
+        lines.append(
+            "Ignore the unrelated birch_planks tower "
+            f"at ({base['x']}, {base['y']}, {base['z']}) with height {noise['height']}."
+        )
+
+    lines.append(f"Question: {task.prompt}")
+    return "\n".join(lines)
+
+
 def read_text_qa_jsonl(path: str | Path) -> list[TextQATaskSpec]:
     records: list[TextQATaskSpec] = []
     lines = Path(path).read_text(encoding="utf-8").splitlines()
@@ -158,6 +247,22 @@ def read_text_qa_jsonl(path: str | Path) -> list[TextQATaskSpec]:
             record = TextQATaskSpec.model_validate(payload)
         except ValidationError as exc:
             raise ValueError(f"invalid text QA task at line {line_number}: {exc}") from exc
+        records.append(record)
+    return records
+
+
+def read_text_qa_trajectory_jsonl(path: str | Path) -> list[TextQATrajectoryRecord]:
+    records: list[TextQATrajectoryRecord] = []
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        payload = json.loads(stripped)
+        try:
+            record = TextQATrajectoryRecord.model_validate(payload)
+        except ValidationError as exc:
+            raise ValueError(f"invalid text QA trajectory at line {line_number}: {exc}") from exc
         records.append(record)
     return records
 

@@ -112,5 +112,7 @@ def test_grpo_stage_uses_runtime_curriculum_updates(monkeypatch, tmp_path) -> No
     assert args._sampling_summary["strategy"] == "curriculum"
     assert args._sampling_summary["bootstrap_source"] == "none"
     assert args._sampling_summary["updates"][0]["completed_episodes"] == 2
+    assert args._sampling_summary["updates"][0]["family_success_rates"]["t5_modification:fake"] == 0.5
     assert args._sampling_summary["updates"][0]["weights"]["t5_modification"] == 2
+    assert args._sampling_summary["final_family_success_rates"]["t5_modification:fake"] == 0.5
     assert _FakeRandom.instances[0].weight_history[2] == [1, 2, 1]
