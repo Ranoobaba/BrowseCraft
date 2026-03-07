@@ -47,8 +47,16 @@ _SYSTEM_PROMPT = (
     "has been identified and the user did not provide explicit absolute coordinates.\n"
     "Treat relative phrasing like 'in front of me', 'behind me', 'next to me', 'left/right of me' as explicit "
     "location instructions derived from locked player_position; do not reinterpret those as the default 10-block build_anchor.\n"
+    "When the user gives no explicit location for a new structure, place it in front of the player using the injected build_anchor. "
+    "Do not center new floors, platforms, rooms, or other footprints on the player's block unless the user explicitly asks for that.\n"
+    "For floors, platforms, walls, and other footprints placed relative to the player, keep the entire footprint on the requested side of the player. "
+    "Do not center the footprint on the player or straddle the player's block unless the user explicitly asks for that.\n"
     "If the user says 'directly in front of me' without a distance, use exactly one block forward from block_x/block_z.\n"
     "For immediate relative placements around the player, default vertical placement to block_y unless the user specifies y.\n"
+    "build_geometry floor/platform anchors are centers, so shift the anchor far enough that the nearest edge starts at the requested "
+    "offset instead of centering the footprint on the player's block.\n"
+    "Example: for a 5x5 floor directly in front of a south-facing player at block_z=20, place the floor over z=21..25 rather than "
+    "centering it on z=20 or z=21.\n"
     "ground_y is the terrain block beneath the player. For towers, rooms, walls, pillars, platforms, and similar builds "
     "placed at/around/in front of the player, start the build at block_y so it sits on top of the ground rather than "
     "embedding into the ground at ground_y, unless the user explicitly asks to start from the ground block itself.\n"
@@ -97,6 +105,7 @@ _MAX_MODEL_OUTPUT_TOKENS = 2048
 _TRIAGE_MAX_TOKENS = 120
 _MAX_Y_DELTA_FROM_PLAYER = 96
 _DEFAULT_FORWARD_BUILD_OFFSET = 10
+_DEFAULT_RELATIVE_PLAYER_OFFSET = 1
 _PLACE_BLOCK_BATCH_SIZE = 256
 _MAX_STEP_RETRIES = 2
 _CACHE_CONTROL_EPHEMERAL: dict[str, str] = {"type": "ephemeral"}
@@ -417,6 +426,14 @@ class _BuildAnchor:
 
 
 @dataclass(slots=True, frozen=True)
+class _RelativePlacementGuard:
+    label: str
+    dx: int
+    dz: int
+    min_projection: int = 1
+
+
+@dataclass(slots=True, frozen=True)
 class _SessionKey:
     client_id: str
     world_id: str
@@ -522,6 +539,7 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
         "description": (
             "Build deterministic regular shapes around an anchor (box, cylinder, sphere, floor, wall, pillar, stairs, flat/gabled/hipped roofs). "
             "Anchor is the center with negative-bias centering for even sizes. "
+            "For default in-front builds and relative floor/platform requests, shift the anchor so the entire footprint stays on the intended side of the player instead of overlapping the player's block. "
             "Use rotation for cardinal orientation. Use this tool for supported regular geometry even when dimensions must be derived from corners or existing bounds."
         ),
         "input_schema": _BUILD_GEOMETRY_TOOL_SCHEMA,
@@ -833,6 +851,11 @@ class ChatOrchestrator:
                 player_position=player_position,
                 triage=triage,
             )
+            relative_placement_guard = _relative_placement_guard_for_request(
+                user_message=user_message,
+                player_position=player_position,
+                triage=triage,
+            )
             system_prompt = _compose_system_prompt(
                 request_mode=request_mode,
                 player_position=player_position,
@@ -852,6 +875,7 @@ class ChatOrchestrator:
                     player_position=player_position,
                     cached_player_position=player_position,
                     request_mode="build",
+                    relative_placement_guard=relative_placement_guard,
                 )
                 if undo_result.is_error:
                     raise RuntimeError(f"undo_last failed: {undo_result.content}")
@@ -906,6 +930,7 @@ class ChatOrchestrator:
                                 force_tool_use=True,
                                 require_build_modification=False,
                                 enforce_build_intent=True,
+                                relative_placement_guard=relative_placement_guard,
                             )
                             step_history_messages = step_attempt_messages
                             break
@@ -950,6 +975,7 @@ class ChatOrchestrator:
                 force_tool_use=force_tool_use,
                 require_build_modification=False,
                 enforce_build_intent=enforce_build_intent,
+                relative_placement_guard=relative_placement_guard,
             )
             return assistant_text
         finally:
@@ -1067,6 +1093,7 @@ class ChatOrchestrator:
         force_tool_use: bool,
         require_build_modification: bool,
         enforce_build_intent: bool,
+        relative_placement_guard: _RelativePlacementGuard | None,
     ) -> tuple[str, bool, list[dict[str, Any]]]:
         mode_tool_schemas = _tool_schemas_for_mode(request_mode)
         tool_rounds = 0
@@ -1137,6 +1164,7 @@ class ChatOrchestrator:
                         player_position=player_position,
                         cached_player_position=player_position,
                         request_mode=request_mode,
+                        relative_placement_guard=relative_placement_guard,
                     )
                     for tool_use in tool_uses
                 ]
@@ -1253,6 +1281,7 @@ class ChatOrchestrator:
         player_position: _PlayerPositionResult,
         cached_player_position: _PlayerPositionResult,
         request_mode: Literal["build", "plan", "plan_fast"],
+        relative_placement_guard: _RelativePlacementGuard | None,
     ) -> _ToolExecutionResult:
         if request_mode == "build" and tool_name in {"set_plan", "get_active_overlay", "modify_overlay"}:
             return _ToolExecutionResult(
@@ -1286,6 +1315,7 @@ class ChatOrchestrator:
                     tool_name="place_blocks",
                     params={"placements": placements},
                     player_position=player_position,
+                    relative_placement_guard=relative_placement_guard,
                 )
                 placed_count = 0
                 batches = 0
@@ -1310,6 +1340,7 @@ class ChatOrchestrator:
                     tool_name=tool_name,
                     params=params,
                     player_position=player_position,
+                    relative_placement_guard=relative_placement_guard,
                 )
                 result = await self._dispatch_tool(client_id=client_id, tool_name=tool_name, params=params)
             await self._store_tool_memory(
@@ -1685,8 +1716,8 @@ def _build_anchor_for_request(
     triage: _BuildRequestTriageModel | None,
 ) -> _BuildAnchor:
     distance = _DEFAULT_FORWARD_BUILD_OFFSET
-    if triage is not None and triage.spatial_reference == "relative_to_player" and triage.distance_hint is not None:
-        distance = triage.distance_hint
+    if triage is not None and triage.spatial_reference == "relative_to_player":
+        distance = triage.distance_hint if triage.distance_hint is not None else _DEFAULT_RELATIVE_PLAYER_OFFSET
     build_anchor = _forward_build_anchor(
         player_position=player_position,
         distance=distance,
@@ -1803,7 +1834,8 @@ def _compose_system_prompt(
             f"{system_prompt}\n"
             "Relative-to-player placement rule for this turn:\n"
             f"- Use block_y={player_position.block_y} as the bottom/start level for structures placed at or around the player unless the user explicitly says to start from the ground block.\n"
-            "- For an N-block-tall structure placed relative to the player, the vertical span is block_y through block_y+N-1 unless the user specifies otherwise."
+            "- For an N-block-tall structure placed relative to the player, the vertical span is block_y through block_y+N-1 unless the user specifies otherwise.\n"
+            "- For floors and platforms in front of the player, start the nearest edge one block forward unless the user specifies a different offset, and center the width side-to-side rather than centering the whole footprint on the player's block."
         )
         if player_position.ground_y is not None:
             system_prompt = (
@@ -1848,21 +1880,69 @@ def _step_execution_message(
     )
 
 
+def _relative_placement_guard_for_request(
+    *,
+    user_message: str,
+    player_position: _PlayerPositionResult,
+    triage: _BuildRequestTriageModel | None,
+) -> _RelativePlacementGuard | None:
+    if triage is None or triage.spatial_reference not in {"relative_to_player", "default_anchor"}:
+        return None
+
+    message = user_message.lower()
+    forward_dx, forward_dz = _horizontal_facing_offset(player_position.facing)
+    left_dx, left_dz = forward_dz, -forward_dx
+    right_dx, right_dz = -forward_dz, forward_dx
+
+    if triage.spatial_reference == "default_anchor":
+        if any(
+            phrase in message
+            for phrase in (
+                "centered on me",
+                "center it on me",
+                "around me",
+                "surround me",
+                "use my current position",
+                "use the player's current block position",
+                "at my position",
+                "on me",
+            )
+        ):
+            return None
+        return _RelativePlacementGuard(label="in front of", dx=forward_dx, dz=forward_dz)
+
+    if "in front of me" in message:
+        return _RelativePlacementGuard(label="in front of", dx=forward_dx, dz=forward_dz)
+    if "behind me" in message:
+        return _RelativePlacementGuard(label="behind", dx=-forward_dx, dz=-forward_dz)
+    if "left of me" in message or "to my left" in message:
+        return _RelativePlacementGuard(label="to the left of", dx=left_dx, dz=left_dz)
+    if "right of me" in message or "to my right" in message:
+        return _RelativePlacementGuard(label="to the right of", dx=right_dx, dz=right_dz)
+    return None
+
+
+def _horizontal_facing_offset(facing: str) -> tuple[int, int]:
+    facing_normalized = facing.lower()
+    if facing_normalized == "north":
+        return (0, -1)
+    if facing_normalized == "south":
+        return (0, 1)
+    if facing_normalized == "east":
+        return (1, 0)
+    if facing_normalized == "west":
+        return (-1, 0)
+    raise ValueError(f"Unsupported player facing: {facing}")
+
+
 def _forward_build_anchor(
     *,
     player_position: _PlayerPositionResult,
     distance: int,
 ) -> _BuildAnchor:
-    facing = player_position.facing.lower()
-    dx, dz = 0, 0
-    if facing == "north":
-        dz = -distance
-    elif facing == "south":
-        dz = distance
-    elif facing == "east":
-        dx = distance
-    elif facing == "west":
-        dx = -distance
+    forward_dx, forward_dz = _horizontal_facing_offset(player_position.facing)
+    dx = forward_dx * distance
+    dz = forward_dz * distance
 
     anchor_ground_y = player_position.ground_y
     if anchor_ground_y is None:
@@ -1911,6 +1991,7 @@ def _validate_placement_against_player_position(
     tool_name: str,
     params: dict[str, Any],
     player_position: _PlayerPositionResult,
+    relative_placement_guard: _RelativePlacementGuard | None,
 ) -> None:
     ys: list[int]
     if tool_name == "place_blocks":
@@ -1927,6 +2008,31 @@ def _validate_placement_against_player_position(
         raise ValueError(
             f"{tool_name} y-range {min_y}..{max_y} is detached from current player block_y {player_y}; "
             "derive placement coordinates from the locked player_position for this request"
+        )
+
+    if relative_placement_guard is None:
+        return
+
+    xz_positions: list[tuple[int, int]]
+    if tool_name == "place_blocks":
+        xz_positions = [(placement["x"], placement["z"]) for placement in params["placements"]]
+    else:
+        min_x = min(params["from_corner"]["x"], params["to_corner"]["x"])
+        max_x = max(params["from_corner"]["x"], params["to_corner"]["x"])
+        min_z = min(params["from_corner"]["z"], params["to_corner"]["z"])
+        max_z = max(params["from_corner"]["z"], params["to_corner"]["z"])
+        xz_positions = [(min_x, min_z), (min_x, max_z), (max_x, min_z), (max_x, max_z)]
+
+    min_projection = min(
+        ((x - player_position.block_x) * relative_placement_guard.dx)
+        + ((z - player_position.block_z) * relative_placement_guard.dz)
+        for x, z in xz_positions
+    )
+    if min_projection < relative_placement_guard.min_projection:
+        raise ValueError(
+            f"{tool_name} placements for a request {relative_placement_guard.label} the player must stay fully "
+            f"{relative_placement_guard.label} the player at ({player_position.block_x}, {player_position.block_z}); "
+            f"minimum projected offset was {min_projection}"
         )
 
 

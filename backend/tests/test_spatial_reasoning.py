@@ -435,6 +435,64 @@ def test_builds_tower_in_front_of_player_from_facing(_configured_settings: None)
     assert_footprint_matches(stone_coords, {(world.player.x + dx, world.player.z + dz)})
 
 
+@pytest.mark.quick_spatial
+def test_builds_floor_entirely_in_front_of_player(_configured_settings: None) -> None:
+    world = HeadlessVoxelWorld(player=PlayerState(x=5, y=64, z=-3, facing="south"))
+    world.flat_terrain(radius=24)
+    before = world.snapshot()
+
+    app = create_app()
+    client_id = "spatial-forward-floor-client"
+
+    with TestClient(app) as client:
+        with client.websocket_connect(f"/v1/ws/{client_id}") as websocket:
+            _run_chat_round_trip(
+                client=client,
+                websocket=websocket,
+                world=world,
+                client_id=client_id,
+                message="Build a 5x5 minecraft:oak_planks floor directly in front of me.",
+            )
+
+    changed = world.diff(before)
+    floor_coords = {coord for coord, block_id in changed.items() if block_id == "minecraft:oak_planks"}
+    expected = {(x, world.player.y, z) for x in range(3, 8) for z in range(-2, 3)}
+
+    assert floor_coords == expected
+    assert _is_connected(floor_coords)
+    assert_height_profile(floor_coords, world.player.y, world.player.y)
+    assert all(z > world.player.z for _, _, z in floor_coords)
+
+
+@pytest.mark.quick_spatial
+def test_default_anchor_floor_stays_in_front_of_player(_configured_settings: None) -> None:
+    world = HeadlessVoxelWorld(player=PlayerState(x=5, y=64, z=-3, facing="south"))
+    world.flat_terrain(radius=24)
+    before = world.snapshot()
+
+    app = create_app()
+    client_id = "spatial-default-floor-client"
+
+    with TestClient(app) as client:
+        with client.websocket_connect(f"/v1/ws/{client_id}") as websocket:
+            _run_chat_round_trip(
+                client=client,
+                websocket=websocket,
+                world=world,
+                client_id=client_id,
+                message="Build a 5x5 minecraft:oak_planks floor.",
+            )
+
+    changed = world.diff(before)
+    floor_coords = {coord for coord, block_id in changed.items() if block_id == "minecraft:oak_planks"}
+
+    assert len(floor_coords) == 25
+    assert _is_connected(floor_coords)
+    assert_height_profile(floor_coords, world.player.y, world.player.y)
+    assert all(z > world.player.z for _, _, z in floor_coords)
+    assert (world.player.x, world.player.y, world.player.z) not in floor_coords
+
+
 def test_replaces_oak_walls_with_birch(_configured_settings: None) -> None:
     world = HeadlessVoxelWorld()
     world.flat_terrain(radius=24)

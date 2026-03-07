@@ -10,7 +10,19 @@ from typing import Any
 
 import pytest
 
-from browsecraft_backend.chat_orchestrator import CHAT_MODEL, ChatOrchestrator, _TOOL_SCHEMAS, _tool_status_message
+from browsecraft_backend.chat_orchestrator import (
+    CHAT_MODEL,
+    ChatOrchestrator,
+    _BuildAnchor,
+    _BuildRequestTriageModel,
+    _PlayerPositionResult,
+    _TOOL_SCHEMAS,
+    _build_anchor_for_request,
+    _compose_system_prompt,
+    _relative_placement_guard_for_request,
+    _tool_status_message,
+    _validate_placement_against_player_position,
+)
 from browsecraft_backend.convex_client import ConvexHttpClient
 from browsecraft_backend.models import ChatRequest
 from browsecraft_backend.supermemory_client import SupermemoryProfileContext, SupermemorySearchResult
@@ -1039,6 +1051,141 @@ async def test_directly_in_front_request_uses_one_block_forward_anchor() -> None
 
     first_executor_call = anthropic_client.messages.calls[1]
     assert "build_anchor_x=10, build_anchor_y=64, build_anchor_z=21" in first_executor_call["system"][0]["text"]
+
+
+def test_relative_request_without_distance_uses_one_block_forward_anchor() -> None:
+    player_position = _PlayerPositionResult(
+        x=10.5,
+        y=64.0,
+        z=20.5,
+        block_x=10,
+        block_y=64,
+        block_z=20,
+        ground_y=63,
+        facing="south",
+        dimension="minecraft:overworld",
+    )
+    triage = _BuildRequestTriageModel(
+        is_build_request=True,
+        complexity="simple",
+        spatial_reference="relative_to_player",
+        distance_hint=None,
+        should_undo_first=False,
+    )
+
+    assert _build_anchor_for_request(player_position=player_position, triage=triage) == _BuildAnchor(x=10, y=64, z=21)
+
+
+def test_relative_floor_prompt_keeps_footprint_entirely_ahead_of_player() -> None:
+    player_position = _PlayerPositionResult(
+        x=10.5,
+        y=64.0,
+        z=20.5,
+        block_x=10,
+        block_y=64,
+        block_z=20,
+        ground_y=63,
+        facing="south",
+        dimension="minecraft:overworld",
+    )
+    triage = _BuildRequestTriageModel(
+        is_build_request=True,
+        complexity="simple",
+        spatial_reference="relative_to_player",
+        distance_hint=1,
+        should_undo_first=False,
+    )
+
+    prompt = _compose_system_prompt(
+        request_mode="build",
+        player_position=player_position,
+        build_anchor=_BuildAnchor(x=10, y=64, z=21),
+        memory_context="",
+        triage=triage,
+    )
+
+    assert "keep the entire footprint on the requested side of the player" in prompt
+    assert "place the floor over z=21..25" in prompt
+
+
+def test_relative_front_guard_rejects_platform_that_straddles_player() -> None:
+    player_position = _PlayerPositionResult(
+        x=10.5,
+        y=64.0,
+        z=20.5,
+        block_x=10,
+        block_y=64,
+        block_z=20,
+        ground_y=63,
+        facing="south",
+        dimension="minecraft:overworld",
+    )
+    triage = _BuildRequestTriageModel(
+        is_build_request=True,
+        complexity="simple",
+        spatial_reference="relative_to_player",
+        distance_hint=1,
+        should_undo_first=False,
+    )
+    relative_guard = _relative_placement_guard_for_request(
+        user_message="Build a 5x5 oak floor in front of me.",
+        player_position=player_position,
+        triage=triage,
+    )
+
+    centered_platform = [
+        {"x": x, "y": 64, "z": z, "block_id": "minecraft:oak_planks"}
+        for x in range(8, 13)
+        for z in range(19, 24)
+    ]
+
+    with pytest.raises(ValueError, match="fully in front of the player"):
+        _validate_placement_against_player_position(
+            tool_name="place_blocks",
+            params={"placements": centered_platform},
+            player_position=player_position,
+            relative_placement_guard=relative_guard,
+        )
+
+
+def test_default_anchor_guard_rejects_platform_centered_on_player() -> None:
+    player_position = _PlayerPositionResult(
+        x=10.5,
+        y=64.0,
+        z=20.5,
+        block_x=10,
+        block_y=64,
+        block_z=20,
+        ground_y=63,
+        facing="south",
+        dimension="minecraft:overworld",
+    )
+    triage = _BuildRequestTriageModel(
+        is_build_request=True,
+        complexity="simple",
+        spatial_reference="default_anchor",
+        distance_hint=None,
+        should_undo_first=False,
+    )
+    default_guard = _relative_placement_guard_for_request(
+        user_message="Build a 5x5 oak floor.",
+        player_position=player_position,
+        triage=triage,
+    )
+
+    centered_platform = [
+        {"x": x, "y": 64, "z": z, "block_id": "minecraft:oak_planks"}
+        for x in range(8, 13)
+        for z in range(18, 23)
+    ]
+
+    with pytest.raises(ValueError, match="fully in front of the player"):
+        _validate_placement_against_player_position(
+            tool_name="place_blocks",
+            params={"placements": centered_platform},
+            player_position=player_position,
+            relative_placement_guard=default_guard,
+        )
 
 
 @pytest.mark.asyncio

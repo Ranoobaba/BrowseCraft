@@ -31,8 +31,6 @@ import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.glfw.GLFWCharCallbackI;
-import org.lwjgl.glfw.GLFWKeyCallbackI;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -129,9 +127,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private int inventoryPollCountdown;
     private volatile String latestStatusMessage = "";
     private final HudChatState hudChatState = new HudChatState();
-    private GLFWKeyCallbackI previousKeyCallback;
-    private GLFWCharCallbackI previousCharCallback;
-    private final List<ChatMessage> chatHistory = new ArrayList<>();
+    private final List<ChatPanelScreen.ChatMessage> chatHistory = new ArrayList<>();
     private String activeToolStatus = "";
     private boolean assistantStreaming;
     private HudCaptureSession hudCaptureSession;
@@ -204,7 +200,6 @@ public final class BrowseCraftClient implements ClientModInitializer {
         );
 
         registerKeyBindings();
-        registerHudInputCallbacks();
         registerCommands();
         registerClientTick();
         registerHudRenderer();
@@ -267,13 +262,13 @@ public final class BrowseCraftClient implements ClientModInitializer {
 
             dispatcher.register(literal("chat")
                     .executes(context -> {
-                        openHudInput("");
+                        openChatPanel(MinecraftClient.getInstance(), "");
                         return 1;
                     })
                     .then(argument("message", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String message = StringArgumentType.getString(context, "message");
-                                openHudInput(message);
+                                openChatPanel(MinecraftClient.getInstance(), message);
                                 return 1;
                             })));
 
@@ -289,7 +284,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     .then(argument("query", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String query = StringArgumentType.getString(context, "query");
-                                hudChatState.ensureHudVisible();
+                                openChatPanel(MinecraftClient.getInstance(), "");
                                 commandController.submitSearch(query);
                                 return 1;
                             })));
@@ -298,7 +293,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
                     .then(argument("prompt", StringArgumentType.greedyString())
                             .executes(context -> {
                                 String prompt = StringArgumentType.getString(context, "prompt");
-                                hudChatState.ensureHudVisible();
+                                openChatPanel(MinecraftClient.getInstance(), "");
                                 commandController.submitImagine(prompt);
                                 return 1;
                             })));
@@ -346,7 +341,11 @@ public final class BrowseCraftClient implements ClientModInitializer {
     private void registerClientTick() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openChatKey.wasPressed()) {
-                hudChatState.cycleMode();
+                if (client.currentScreen instanceof ChatPanelScreen) {
+                    client.setScreen(null);
+                } else {
+                    openChatPanel(client, "");
+                }
             }
 
             if (client.player == null || client.world == null) {
@@ -450,11 +449,16 @@ public final class BrowseCraftClient implements ClientModInitializer {
         );
     }
 
-    private void openHudInput(String prefill) {
-        hudChatState.openInput(prefill);
+    private void openChatPanel(MinecraftClient client, String prefill) {
+        client.setScreen(new ChatPanelScreen(
+                this::submitChatFromPanel,
+                this::chatHistorySnapshot,
+                this::hudStatusLabel,
+                prefill
+        ));
     }
 
-    private void submitChatFromHud(String message) {
+    private void submitChatFromPanel(String message) {
         if (message.startsWith("/plan ")) {
             String planPrompt = message.substring("/plan ".length()).trim();
             if (!planPrompt.isEmpty()) {
@@ -479,6 +483,10 @@ public final class BrowseCraftClient implements ClientModInitializer {
         commandController.submitChat(message);
     }
 
+    private List<ChatPanelScreen.ChatMessage> chatHistorySnapshot() {
+        return List.copyOf(chatHistory);
+    }
+
     private String hudStatusLabel() {
         if (activeToolStatus.isBlank()) {
             if (assistantStreaming) {
@@ -487,73 +495,6 @@ public final class BrowseCraftClient implements ClientModInitializer {
             return "";
         }
         return activeToolStatus;
-    }
-
-    private void registerHudInputCallbacks() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        client.execute(() -> {
-            long windowHandle = client.getWindow().getHandle();
-            previousKeyCallback = GLFW.glfwSetKeyCallback(windowHandle, (window, key, scancode, action, mods) -> {
-                if (HudInputCapture.shouldConsumeKey(hudChatState.mode(), client.currentScreen != null, action)) {
-                    client.execute(() -> onHudKeyInput(client, key, action));
-                    return;
-                }
-                GLFWKeyCallbackI chained = previousKeyCallback;
-                if (chained != null) {
-                    chained.invoke(window, key, scancode, action, mods);
-                }
-            });
-            previousCharCallback = GLFW.glfwSetCharCallback(windowHandle, (window, codepoint) -> {
-                if (HudInputCapture.shouldConsumeChar(hudChatState.mode(), client.currentScreen != null, codepoint)) {
-                    client.execute(() -> onHudCharInput(client, codepoint));
-                    return;
-                }
-                GLFWCharCallbackI chained = previousCharCallback;
-                if (chained != null) {
-                    chained.invoke(window, codepoint);
-                }
-            });
-        });
-    }
-
-    private void onHudKeyInput(MinecraftClient client, int key, int action) {
-        if (hudChatState.mode() != HudChatState.Mode.INPUT) {
-            return;
-        }
-        if (client.currentScreen != null) {
-            return;
-        }
-        if (action != GLFW.GLFW_PRESS && action != GLFW.GLFW_REPEAT) {
-            return;
-        }
-
-        switch (key) {
-            case GLFW.GLFW_KEY_ESCAPE -> hudChatState.cancelInput();
-            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
-                String message = hudChatState.submit();
-                if (!message.isEmpty()) {
-                    submitChatFromHud(message);
-                }
-            }
-            case GLFW.GLFW_KEY_BACKSPACE -> hudChatState.backspace();
-            case GLFW.GLFW_KEY_LEFT -> hudChatState.moveLeft();
-            case GLFW.GLFW_KEY_RIGHT -> hudChatState.moveRight();
-            default -> {
-            }
-        }
-    }
-
-    private void onHudCharInput(MinecraftClient client, int codepoint) {
-        if (hudChatState.mode() != HudChatState.Mode.INPUT) {
-            return;
-        }
-        if (client.currentScreen != null) {
-            return;
-        }
-        if (!Character.isValidCodePoint(codepoint) || Character.isISOControl(codepoint)) {
-            return;
-        }
-        hudChatState.insert((char) codepoint);
     }
 
     private HudRenderSnapshot buildHudRenderSnapshot(MinecraftClient client) {
@@ -667,11 +608,11 @@ public final class BrowseCraftClient implements ClientModInitializer {
         }
     }
 
-    private static List<RenderedLine> buildRenderedLines(List<ChatMessage> messages, TextRenderer textRenderer, int width) {
+    private static List<RenderedLine> buildRenderedLines(List<ChatPanelScreen.ChatMessage> messages, TextRenderer textRenderer, int width) {
         List<RenderedLine> lines = new ArrayList<>();
-        for (ChatMessage message : messages) {
-            int color = message.role() == ChatRole.USER ? 0xFF7FD7FF : 0xFFF0F0F0;
-            String prefix = message.role() == ChatRole.USER ? "You: " : "AI: ";
+        for (ChatPanelScreen.ChatMessage message : messages) {
+            int color = message.role() == ChatPanelScreen.ChatRole.USER ? 0xFF7FD7FF : 0xFFF0F0F0;
+            String prefix = message.role() == ChatPanelScreen.ChatRole.USER ? "You: " : "AI: ";
             Text text = Text.literal(prefix + message.text());
             List<OrderedText> wrapped = textRenderer.wrapLines(text, width);
             if (wrapped.isEmpty()) {
@@ -704,8 +645,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
     }
 
     private void handleChatUserMessage(String message) {
-        hudChatState.ensureHudVisible();
-        chatHistory.add(new ChatMessage(ChatRole.USER, message));
+        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.USER, message));
         assistantStreaming = true;
     }
 
@@ -714,31 +654,28 @@ public final class BrowseCraftClient implements ClientModInitializer {
             return;
         }
         int lastIndex = chatHistory.size() - 1;
-        if (lastIndex < 0 || chatHistory.get(lastIndex).role() != ChatRole.ASSISTANT || !assistantStreaming) {
-            chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, delta));
+        if (lastIndex < 0 || chatHistory.get(lastIndex).role() != ChatPanelScreen.ChatRole.ASSISTANT || !assistantStreaming) {
+            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, delta));
         } else {
-            ChatMessage last = chatHistory.get(lastIndex);
-            chatHistory.set(lastIndex, new ChatMessage(last.role(), last.text() + delta));
+            ChatPanelScreen.ChatMessage last = chatHistory.get(lastIndex);
+            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(last.role(), last.text() + delta));
         }
-        hudChatState.ensureHudVisible();
         assistantStreaming = true;
     }
 
     private void handleChatAssistantMessage(String message) {
         int lastIndex = chatHistory.size() - 1;
-        if (lastIndex >= 0 && chatHistory.get(lastIndex).role() == ChatRole.ASSISTANT) {
-            chatHistory.set(lastIndex, new ChatMessage(ChatRole.ASSISTANT, message));
+        if (lastIndex >= 0 && chatHistory.get(lastIndex).role() == ChatPanelScreen.ChatRole.ASSISTANT) {
+            chatHistory.set(lastIndex, new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
         } else {
-            chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, message));
+            chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, message));
         }
-        hudChatState.ensureHudVisible();
         assistantStreaming = false;
         activeToolStatus = "";
     }
 
     private void handleToolStatus(String status) {
         activeToolStatus = status;
-        hudChatState.ensureHudVisible();
     }
 
     private void runBuildTestCommand(MinecraftClient client) {
@@ -801,9 +738,9 @@ public final class BrowseCraftClient implements ClientModInitializer {
 
     private void prepareHudCaptureState(HudCaptureTarget target) {
         chatHistory.clear();
-        chatHistory.add(new ChatMessage(ChatRole.USER, "build a lantern arch over the path"));
-        chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, "Placing the main arch supports with spruce logs."));
-        chatHistory.add(new ChatMessage(ChatRole.ASSISTANT, "Next step: hang lanterns under the center span."));
+        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.USER, "build a lantern arch over the path"));
+        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, "Placing the main arch supports with spruce logs."));
+        chatHistory.add(new ChatPanelScreen.ChatMessage(ChatPanelScreen.ChatRole.ASSISTANT, "Next step: hang lanterns under the center span."));
         activeToolStatus = "Step 2/3: placing supports...";
         assistantStreaming = false;
 
@@ -2050,14 +1987,6 @@ public final class BrowseCraftClient implements ClientModInitializer {
         return instance.latestStatusMessage;
     }
 
-    private enum ChatRole {
-        USER,
-        ASSISTANT
-    }
-
-    private record ChatMessage(ChatRole role, String text) {
-    }
-
     private record RenderedLine(String plainText, OrderedText orderedText, int color) {
     }
 
@@ -2086,7 +2015,7 @@ public final class BrowseCraftClient implements ClientModInitializer {
     }
 
     private record HudDebugState(
-            List<ChatMessage> chatHistory,
+            List<ChatPanelScreen.ChatMessage> chatHistory,
             String activeToolStatus,
             boolean assistantStreaming,
             HudChatState.Snapshot hudState
