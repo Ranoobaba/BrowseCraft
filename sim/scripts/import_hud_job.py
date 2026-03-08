@@ -48,51 +48,86 @@ def _normalize_model_name(model_name: str) -> str:
 def _normalize_message_content(content: Any) -> list[dict[str, Any]]:
     if isinstance(content, str):
         return [{"type": "text", "text": content}]
+    if isinstance(content, dict):
+        return [_normalize_message_block(content)]
     if not isinstance(content, list):
         raise ValueError(f"unsupported message content type: {type(content).__name__}")
 
     normalized: list[dict[str, Any]] = []
     for block in content:
-        if not isinstance(block, dict):
-            raise ValueError(f"unsupported content block type: {type(block).__name__}")
-        block_type = block.get("type")
-        if block_type == "text":
-            normalized.append({"type": "text", "text": block["text"]})
-            continue
-        if block_type == "tool_use":
-            normalized.append(
-                {
-                    "type": "tool_use",
-                    "id": block["id"],
-                    "name": block["name"],
-                    "input": block.get("input") or {},
-                }
-            )
-            continue
-        if block_type == "tool_result":
-            normalized.append(
+        normalized.append(_normalize_message_block(block))
+    return normalized
+
+
+def _normalize_message_block(block: Any) -> dict[str, Any]:
+    if not isinstance(block, dict):
+        raise ValueError(f"unsupported content block type: {type(block).__name__}")
+    block_type = block.get("type")
+    if block_type == "text":
+        return {"type": "text", "text": block["text"]}
+    if block_type == "tool_use":
+        return {
+            "type": "tool_use",
+            "id": block["id"],
+            "name": block["name"],
+            "input": block.get("input") or {},
+        }
+    if block_type == "tool_result":
+        return {
+            "type": "tool_result",
+            "tool_use_id": block["tool_use_id"],
+            "content": _extract_text_blocks(block.get("content")),
+            "is_error": bool(block.get("is_error", False)),
+        }
+    raise ValueError(f"unsupported content block: {block_type}")
+
+
+def _normalize_tool_call(tool_call: dict[str, Any]) -> dict[str, Any]:
+    function = tool_call["function"]
+    arguments = function["arguments"]
+    return {
+        "type": "tool_use",
+        "id": tool_call["id"],
+        "name": function["name"],
+        "input": json.loads(arguments) if isinstance(arguments, str) else dict(arguments),
+    }
+
+
+def _normalize_request_message(message: dict[str, Any]) -> dict[str, Any]:
+    role = message["role"]
+    if role == "tool":
+        return {
+            "role": "user",
+            "content": [
                 {
                     "type": "tool_result",
-                    "tool_use_id": block["tool_use_id"],
-                    "content": _extract_text_blocks(block.get("content")),
-                    "is_error": bool(block.get("is_error", False)),
+                    "tool_use_id": message["tool_call_id"],
+                    "content": _extract_text_blocks(message.get("content")),
+                    "is_error": False,
                 }
-            )
-            continue
-        raise ValueError(f"unsupported content block: {block_type}")
-    return normalized
+            ],
+        }
+
+    blocks: list[dict[str, Any]] = []
+    content = message.get("content")
+    if isinstance(content, list):
+        blocks.extend(_normalize_message_content(content))
+    elif isinstance(content, dict):
+        blocks.extend(_normalize_message_content(content))
+    elif isinstance(content, str):
+        if content:
+            blocks.append({"type": "text", "text": content})
+    elif content is not None:
+        raise ValueError(f"unsupported request content type: {type(content).__name__}")
+
+    tool_calls = message.get("tool_calls") or []
+    for tool_call in tool_calls:
+        blocks.append(_normalize_tool_call(tool_call))
+    return {"role": role, "content": blocks}
 
 
 def _normalize_request_messages(raw_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    for message in raw_messages:
-        normalized.append(
-            {
-                "role": message["role"],
-                "content": _normalize_message_content(message["content"]),
-            }
-        )
-    return normalized
+    return [_normalize_request_message(message) for message in raw_messages]
 
 
 def _final_assistant_blocks(span: dict[str, Any]) -> list[dict[str, Any]]:
@@ -103,15 +138,7 @@ def _final_assistant_blocks(span: dict[str, Any]) -> list[dict[str, Any]]:
     if content_text:
         assistant_blocks.append({"type": "text", "text": content_text})
     for tool_call in result.get("tool_calls") or []:
-        arguments = tool_call["function"]["arguments"]
-        assistant_blocks.append(
-            {
-                "type": "tool_use",
-                "id": tool_call["id"],
-                "name": tool_call["function"]["name"],
-                "input": json.loads(arguments) if isinstance(arguments, str) else dict(arguments),
-            }
-        )
+        assistant_blocks.append(_normalize_tool_call(tool_call))
     return assistant_blocks
 
 
@@ -152,11 +179,16 @@ async def _call_hud_tool(
             response.raise_for_status()
             payload = _jsonrpc_payload(response.text)
             if "error" in payload:
-                raise ValueError(f"HUD MCP error for {name}: {payload['error']}")
+                raise RuntimeError(f"HUD MCP error for {name}: {payload['error']}")
             content = payload["result"]["content"]
             if len(content) != 1:
                 raise ValueError(f"expected one HUD MCP content block for {name}")
-            return json.loads(content[0]["text"])
+            result = json.loads(content[0]["text"])
+            if isinstance(result, dict) and "error" in result:
+                raise RuntimeError(f"HUD tool error for {name}: {result['error']}")
+            return result
+        except RuntimeError:
+            raise
         except (httpx.HTTPError, ValueError, json.JSONDecodeError) as exc:
             last_error = exc
             if attempt == _HUD_MAX_ATTEMPTS:
@@ -185,12 +217,26 @@ def _build_raw_row(payload: dict[str, Any], *, reward_tolerance: float) -> tuple
         span for span in spans if span["name"] == "prompts/get.mcp" and span["attributes"]["request"]["method"] == "prompts/get"
     )
     prompt_args = prompt_span["attributes"]["request"]["params"]["arguments"]
-    task = TaskSpec.model_validate_json(prompt_args["task_spec"])
-    reward_config = RewardConfig.model_validate_json(prompt_args["reward_config"])
+    raw_task_spec = prompt_args["task_spec"]
+    raw_reward_config = prompt_args["reward_config"]
+    task = (
+        TaskSpec.model_validate(raw_task_spec)
+        if isinstance(raw_task_spec, dict)
+        else TaskSpec.model_validate_json(raw_task_spec)
+    )
+    reward_config = (
+        RewardConfig.model_validate(raw_reward_config)
+        if isinstance(raw_reward_config, dict)
+        else RewardConfig.model_validate_json(raw_reward_config)
+    )
 
     world = build_world(task)
     before_snapshot = world.snapshot()
-    inference_spans = [span for span in spans if span["name"] == "inference.messages"]
+    inference_spans = [
+        span
+        for span in spans
+        if span["name"] in {"inference.messages", "inference.chat_completion"}
+    ]
     if not inference_spans:
         raise ValueError(f"trace {payload['trace_id']} does not contain inference spans")
 
