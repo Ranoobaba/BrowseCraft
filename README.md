@@ -2,6 +2,7 @@
 
 BrowseCraft is a build-only Minecraft assistant built around a single-shot voxel.exec pipeline.
 The model writes JavaScript against a small voxel DSL, the server executes that code against a headless world, and the Fabric mod applies the resulting absolute block diff in game.
+Execution runs through `just-bash`'s `js-exec` sandbox, with a local patch in `patches/just-bash@2.13.0.patch` to fix the published package's broken worker path.
 
 ## Architecture
 
