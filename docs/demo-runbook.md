@@ -2,36 +2,34 @@
 
 ## Goal
 
-Record a backup end-to-end demo after API keys are configured.
+Record an end-to-end BrowseCraft demo on the new voxel.exec stack.
 
 ## Preflight
 
-1. Fill `backend/.env` with valid keys:
+1. Fill `backend/.env` with:
    - `ANTHROPIC_API_KEY`
-   - `LAMINAR_API_KEY` (optional but recommended)
+   - `ANTHROPIC_CHAT_MODEL` (optional override)
    - `CONVEX_URL`, `CONVEX_ACCESS_KEY` (optional)
-   - `SUPERMEMORY_API_KEY` (optional)
-2. Run test gates:
-   - `cd ~/BrowseCraft/backend && uv run pytest -q`
+2. Run the gates:
+   - `cd ~/BrowseCraft && pnpm --filter @browsecraft/sim test`
+   - `cd ~/BrowseCraft && pnpm --filter @browsecraft/backend test`
    - `cd ~/BrowseCraft/mod && gradle test`
-3. Start backend:
-   - `cd ~/BrowseCraft/backend && uv run browsecraft-backend`
-4. Build/install mod jar:
+3. Start the backend:
+   - `cd ~/BrowseCraft && pnpm --filter @browsecraft/backend dev`
+4. Build and run the mod:
    - `cd ~/BrowseCraft/mod && gradle build`
-   - Copy `mod/build/libs/browsecraft-0.1.0.jar` into Minecraft `mods/`.
+   - `cd ~/BrowseCraft/mod && gradle runClient`
 
 ## Suggested Demo Flow
 
-1. `/build-test` fallback first.
-2. `/chat build a small starter house near me`.
-3. `/chat add windows and a centered doorway`.
-4. `/chat replace oak with birch`.
-5. `/materials`.
-6. `/blueprints save demo-1`.
-7. `/session new`, then `/chat what did we build?`.
+1. `/session new`
+2. `/chat build a small stone house next to me`
+3. `/chat add windows and a centered doorway`
+4. `/chat replace the roof with oak planks`
+5. `/session list`
 
 ## Recording Notes
 
-- Run the full flow 2-3 times before final recording.
-- Keep backend logs visible for credibility during judging.
-- If the model is slow, continue with `/build-test` and narrate expected `/chat` behavior.
+- Keep backend logs visible.
+- Call out that the mod sends a local voxel snapshot, the server executes JavaScript once, and the client applies the resulting block diff.
+- Avoid mentioning deleted commands such as `/search`, `/imagine`, blueprints, or overlay previews.

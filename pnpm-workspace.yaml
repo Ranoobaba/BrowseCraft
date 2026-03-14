@@ -1,0 +1,6 @@
+packages:
+  - sim
+  - backend
+
+patchedDependencies:
+  just-bash@2.13.0: patches/just-bash@2.13.0.patch

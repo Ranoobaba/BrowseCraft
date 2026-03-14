@@ -8,10 +8,20 @@ backend/.env
 backend/**/*.egg-info/
 backend/**/*.pyc
 backend/**/__pycache__/
+backend/node_modules/
+backend/dist/
+backend/.vitest/
 sim/.venv/
 sim/**/*.egg-info/
 sim/**/*.pyc
 sim/**/__pycache__/
+sim/node_modules/
+sim/dist/
+sim/.vitest/
+
+node_modules/
+coverage/
+*.tsbuildinfo
 
 mod/.gradle/
 mod/build/

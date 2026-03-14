@@ -1,0 +1,1363 @@
+[
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "North corresponds to the smallest z coordinate.",
+      "The furthest north marker is blue marker."
+    ],
+    "expected_answer": "blue marker",
+    "family": "furthest_cardinal_marker",
+    "metadata": {
+      "entities": [
+        {
+          "block_id": "minecraft:red_wool",
+          "name": "red marker",
+          "x": 0,
+          "y": 64,
+          "z": 3
+        },
+        {
+          "block_id": "minecraft:blue_wool",
+          "name": "blue marker",
+          "x": 3,
+          "y": 64,
+          "z": -6
+        },
+        {
+          "block_id": "minecraft:green_wool",
+          "name": "green marker",
+          "x": -4,
+          "y": 64,
+          "z": -2
+        }
+      ]
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "Three colored wool markers are nearby: red marker, blue marker, and green marker. Which marker is furthest north?",
+    "seed": 10352537868776792984,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": 0,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": 3,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": -4,
+        "y": 64,
+        "z": -2
+      }
+    ],
+    "task_id": "qa_directional_single_hop:furthest_cardinal_marker:10352537868776792984:0",
+    "tier": "qa_directional_single_hop"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "North corresponds to the smallest z coordinate.",
+      "The furthest north marker is blue marker."
+    ],
+    "expected_answer": "blue marker",
+    "family": "furthest_cardinal_marker",
+    "metadata": {
+      "entities": [
+        {
+          "block_id": "minecraft:red_wool",
+          "name": "red marker",
+          "x": -4,
+          "y": 64,
+          "z": -2
+        },
+        {
+          "block_id": "minecraft:blue_wool",
+          "name": "blue marker",
+          "x": 3,
+          "y": 64,
+          "z": -6
+        },
+        {
+          "block_id": "minecraft:green_wool",
+          "name": "green marker",
+          "x": 0,
+          "y": 64,
+          "z": 3
+        }
+      ]
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "Three colored wool markers are nearby: red marker, blue marker, and green marker. Which marker is furthest north?",
+    "seed": 7173024033020775927,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -4,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": 3,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 0,
+        "y": 64,
+        "z": 3
+      }
+    ],
+    "task_id": "qa_directional_single_hop:furthest_cardinal_marker:7173024033020775927:1",
+    "tier": "qa_directional_single_hop"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "Start at red marker.",
+      "Step 1: move 3 blocks west to blue marker.",
+      "Step 2: move 3 blocks south to green marker.",
+      "Step 3: move 3 blocks south to yellow marker.",
+      "Step 4: move 3 blocks south to purple marker.",
+      "Step 5: move 3 blocks east to orange marker.",
+      "The final marker is orange marker."
+    ],
+    "expected_answer": "orange marker",
+    "family": "resolve_marker_chain",
+    "metadata": {
+      "entities": [
+        {
+          "block_id": "minecraft:red_wool",
+          "name": "red marker",
+          "x": -5,
+          "y": 64,
+          "z": -9
+        },
+        {
+          "block_id": "minecraft:blue_wool",
+          "name": "blue marker",
+          "x": -8,
+          "y": 64,
+          "z": -9
+        },
+        {
+          "block_id": "minecraft:green_wool",
+          "name": "green marker",
+          "x": -8,
+          "y": 64,
+          "z": -6
+        },
+        {
+          "block_id": "minecraft:yellow_wool",
+          "name": "yellow marker",
+          "x": -8,
+          "y": 64,
+          "z": -3
+        },
+        {
+          "block_id": "minecraft:purple_wool",
+          "name": "purple marker",
+          "x": -8,
+          "y": 64,
+          "z": 0
+        },
+        {
+          "block_id": "minecraft:orange_wool",
+          "name": "orange marker",
+          "x": -5,
+          "y": 64,
+          "z": 0
+        }
+      ],
+      "step_distance": 3,
+      "steps": [
+        "west",
+        "south",
+        "south",
+        "south",
+        "east"
+      ]
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "Colored wool markers are placed nearby. Start at the red marker, move to the marker 3 blocks west of that marker, then move to the marker 3 blocks south of that marker, then move to the marker 3 blocks south of that marker, then move to the marker 3 blocks south of that marker, then move to the marker 3 blocks east of that marker. Which marker do you end on?",
+    "seed": 15132720082977905220,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -5,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -8,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": -8,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:yellow_wool",
+        "x": -8,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:purple_wool",
+        "x": -8,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:orange_wool",
+        "x": -5,
+        "y": 64,
+        "z": 0
+      }
+    ],
+    "task_id": "qa_multi_hop_chain:resolve_marker_chain:15132720082977905220:0",
+    "tier": "qa_multi_hop_chain"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "Start at red marker.",
+      "Step 1: move 3 blocks west to blue marker.",
+      "Step 2: move 3 blocks south to green marker.",
+      "Step 3: move 3 blocks west to yellow marker.",
+      "Step 4: move 3 blocks south to purple marker.",
+      "Step 5: move 3 blocks south to orange marker.",
+      "Step 6: move 3 blocks west to cyan marker.",
+      "Step 7: move 3 blocks south to black marker.",
+      "The final marker is black marker."
+    ],
+    "expected_answer": "black marker",
+    "family": "resolve_marker_chain",
+    "metadata": {
+      "entities": [
+        {
+          "block_id": "minecraft:red_wool",
+          "name": "red marker",
+          "x": -3,
+          "y": 64,
+          "z": -6
+        },
+        {
+          "block_id": "minecraft:blue_wool",
+          "name": "blue marker",
+          "x": -6,
+          "y": 64,
+          "z": -6
+        },
+        {
+          "block_id": "minecraft:green_wool",
+          "name": "green marker",
+          "x": -6,
+          "y": 64,
+          "z": -3
+        },
+        {
+          "block_id": "minecraft:yellow_wool",
+          "name": "yellow marker",
+          "x": -9,
+          "y": 64,
+          "z": -3
+        },
+        {
+          "block_id": "minecraft:purple_wool",
+          "name": "purple marker",
+          "x": -9,
+          "y": 64,
+          "z": 0
+        },
+        {
+          "block_id": "minecraft:orange_wool",
+          "name": "orange marker",
+          "x": -9,
+          "y": 64,
+          "z": 3
+        },
+        {
+          "block_id": "minecraft:cyan_wool",
+          "name": "cyan marker",
+          "x": -12,
+          "y": 64,
+          "z": 3
+        },
+        {
+          "block_id": "minecraft:black_wool",
+          "name": "black marker",
+          "x": -12,
+          "y": 64,
+          "z": 6
+        }
+      ],
+      "noise": {
+        "base": {
+          "x": 18,
+          "y": 64,
+          "z": 18
+        },
+        "height": 2,
+        "kind": "tower"
+      },
+      "step_distance": 3,
+      "steps": [
+        "west",
+        "south",
+        "west",
+        "south",
+        "south",
+        "west",
+        "south"
+      ]
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "Colored wool markers are placed nearby. Start at the red marker, move to the marker 3 blocks west of that marker, then move to the marker 3 blocks south of that marker, then move to the marker 3 blocks west of that marker, then move to the marker 3 blocks south of that marker, then move to the marker 3 blocks south of that marker, then move to the marker 3 blocks west of that marker, then move to the marker 3 blocks south of that marker. Which marker do you end on? One extra structure is present but does not affect the answer.",
+    "seed": 13293823215771753840,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -3,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -6,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": -6,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:yellow_wool",
+        "x": -9,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:purple_wool",
+        "x": -9,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:orange_wool",
+        "x": -9,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:cyan_wool",
+        "x": -12,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:black_wool",
+        "x": -12,
+        "y": 64,
+        "z": 6
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": 18,
+        "y": 64,
+        "z": 18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": 18,
+        "y": 65,
+        "z": 18
+      }
+    ],
+    "task_id": "qa_multi_hop_chain:resolve_marker_chain:13293823215771753840:1",
+    "tier": "qa_multi_hop_chain"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "When you face west, behind maps to offset (1, 0).",
+      "The marker at that relative position is blue marker."
+    ],
+    "expected_answer": "blue marker",
+    "family": "relative_to_player_marker",
+    "metadata": {
+      "facing": "west",
+      "world_offsets": {
+        "behind": {
+          "x": 1,
+          "z": 0
+        },
+        "front": {
+          "x": -1,
+          "z": 0
+        },
+        "left": {
+          "x": 0,
+          "z": 1
+        },
+        "right": {
+          "x": 0,
+          "z": -1
+        }
+      }
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "west",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "You are facing west. Four colored markers surround you. Which marker is behind of you?",
+    "seed": 11244848235869481188,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": 1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 0,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:yellow_wool",
+        "x": 0,
+        "y": 64,
+        "z": -1
+      }
+    ],
+    "task_id": "qa_viewpoint_transform:relative_to_player_marker:11244848235869481188:0",
+    "tier": "qa_viewpoint_transform"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "When you face east, behind maps to offset (-1, 0).",
+      "The marker at that relative position is blue marker."
+    ],
+    "expected_answer": "blue marker",
+    "family": "relative_to_player_marker",
+    "metadata": {
+      "facing": "east",
+      "world_offsets": {
+        "behind": {
+          "x": -1,
+          "z": 0
+        },
+        "front": {
+          "x": 1,
+          "z": 0
+        },
+        "left": {
+          "x": 0,
+          "z": -1
+        },
+        "right": {
+          "x": 0,
+          "z": 1
+        }
+      }
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "east",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "You are facing east. Four colored markers surround you. Which marker is behind of you?",
+    "seed": 8193889797997707833,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": 1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 0,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:yellow_wool",
+        "x": 0,
+        "y": 64,
+        "z": 1
+      }
+    ],
+    "task_id": "qa_viewpoint_transform:relative_to_player_marker:8193889797997707833:1",
+    "tier": "qa_viewpoint_transform"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "The enclosure bounds the interior region between its walls.",
+      "The green marker sits inside those bounds while the other towers do not.",
+      "The tower inside the enclosure is green marker."
+    ],
+    "expected_answer": "green marker",
+    "family": "inside_enclosure",
+    "metadata": {
+      "candidate_entity_block_ids": [
+        "minecraft:green_wool",
+        "minecraft:blue_wool",
+        "minecraft:red_wool"
+      ],
+      "enclosure_block_id": "minecraft:stone_bricks",
+      "enclosure_depth": 7,
+      "enclosure_origin": {
+        "x": -2,
+        "y": 64,
+        "z": -3
+      },
+      "enclosure_width": 7,
+      "inside_entity_block_id": "minecraft:green_wool",
+      "inside_tower": "green marker"
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "Three material-coded towers are nearby and one of them is inside a stone_bricks enclosure. Which tower is inside the enclosure?",
+    "seed": 10703983740413018884,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 0,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 0,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 0,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": 9,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": 9,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": 9,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -7,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -7,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -7,
+        "y": 66,
+        "z": 2
+      }
+    ],
+    "task_id": "qa_topology:inside_enclosure:10703983740413018884:0",
+    "tier": "qa_topology"
+  },
+  {
+    "answer_format": "entity_name",
+    "canonical_reasoning": [
+      "The enclosure bounds the interior region between its walls.",
+      "The blue marker sits inside those bounds while the other towers do not.",
+      "The tower inside the enclosure is blue marker."
+    ],
+    "expected_answer": "blue marker",
+    "family": "inside_enclosure",
+    "metadata": {
+      "candidate_entity_block_ids": [
+        "minecraft:blue_wool",
+        "minecraft:green_wool",
+        "minecraft:red_wool"
+      ],
+      "enclosure_block_id": "minecraft:stone_bricks",
+      "enclosure_depth": 7,
+      "enclosure_origin": {
+        "x": -9,
+        "y": 64,
+        "z": -3
+      },
+      "enclosure_width": 9,
+      "inside_entity_block_id": "minecraft:blue_wool",
+      "inside_tower": "blue marker"
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "prompt": "Three material-coded towers are nearby and one of them is inside a stone_bricks enclosure. Which tower is inside the enclosure?",
+    "seed": 6785578972546471723,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -9,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -8,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -8,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -8,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -8,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -2,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -2,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -2,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 3,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 3,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": 3,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -13,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -13,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -13,
+        "y": 66,
+        "z": -1
+      }
+    ],
+    "task_id": "qa_topology:inside_enclosure:6785578972546471723:1",
+    "tier": "qa_topology"
+  }
+]

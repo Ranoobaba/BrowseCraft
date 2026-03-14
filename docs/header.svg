@@ -8,7 +8,7 @@
   <rect width="1200" height="420" fill="url(#bg)"/>
   <rect x="60" y="56" width="1080" height="308" rx="16" fill="#0b1018" stroke="#5da8ff" stroke-width="2"/>
   <text x="100" y="145" fill="#ffffff" font-family="Menlo, Consolas, monospace" font-size="64">BrowseCraft</text>
-  <text x="100" y="200" fill="#9fc6ff" font-family="Menlo, Consolas, monospace" font-size="28">Natural language to Minecraft structures, overlays, and edits</text>
-  <text x="100" y="262" fill="#8fd8a2" font-family="Menlo, Consolas, monospace" font-size="24">/build • /imagine • /chat • /blueprints • /materials • /session</text>
-  <text x="100" y="320" fill="#d7e3f4" font-family="Menlo, Consolas, monospace" font-size="20">Hackathon prototype: FastAPI + Fabric mod + bidirectional WebSocket agent tools</text>
+  <text x="100" y="200" fill="#9fc6ff" font-family="Menlo, Consolas, monospace" font-size="28">Natural language to voxel.exec code, block diffs, and in-game builds</text>
+  <text x="100" y="262" fill="#8fd8a2" font-family="Menlo, Consolas, monospace" font-size="24">/chat • /session • build.apply • build.result</text>
+  <text x="100" y="320" fill="#d7e3f4" font-family="Menlo, Consolas, monospace" font-size="20">TypeScript sim + TypeScript backend + Fabric mod snapshot/apply loop</text>
 </svg>

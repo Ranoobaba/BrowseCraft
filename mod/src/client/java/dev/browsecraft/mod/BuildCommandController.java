@@ -10,64 +10,57 @@ public final class BuildCommandController implements BuildBackendListener {
     public interface ChatEventListener {
         void onUserMessage(String message);
 
-        void onAssistantDelta(String delta);
-
         void onAssistantMessage(String message);
 
-        void onToolStatus(String status);
+        void onStatus(String status);
+    }
+
+    public interface BuildApplyHandler {
+        void onBuildApply(BuildApplyRequest request);
     }
 
     private final String clientId;
     private final BuildBackend backend;
-    private final OverlayState overlayState;
     private final Executor mainExecutor;
     private final Executor workerExecutor;
     private final Consumer<String> statusSink;
     private final Supplier<String> worldIdSupplier;
+    private final Supplier<BuildChatContext> chatContextSupplier;
     private final ChatEventListener chatEvents;
+    private final BuildApplyHandler buildApplyHandler;
     private String activeSessionId;
 
     public BuildCommandController(
             String clientId,
             BuildBackend backend,
-            OverlayState overlayState,
             Executor mainExecutor,
             Executor workerExecutor,
             Consumer<String> statusSink,
             Supplier<String> worldIdSupplier,
-            ChatEventListener chatEvents
+            Supplier<BuildChatContext> chatContextSupplier,
+            ChatEventListener chatEvents,
+            BuildApplyHandler buildApplyHandler
     ) {
         this.clientId = clientId;
         this.backend = backend;
-        this.overlayState = overlayState;
         this.mainExecutor = mainExecutor;
         this.workerExecutor = workerExecutor;
         this.statusSink = statusSink;
         this.worldIdSupplier = worldIdSupplier;
+        this.chatContextSupplier = chatContextSupplier;
         this.chatEvents = chatEvents;
+        this.buildApplyHandler = buildApplyHandler;
         this.backend.connect(this);
     }
 
     public void submitChat(String message) {
-        submitChat(message, null, "build");
+        submitChat(message, null);
     }
 
     public void submitChat(String message, String explicitSessionId) {
-        submitChat(message, explicitSessionId, "build");
-    }
-
-    public void submitPlan(String message) {
-        submitChat(message, null, "plan");
-    }
-
-    public void submitPlan(String message, String explicitSessionId) {
-        submitChat(message, explicitSessionId, "plan");
-    }
-
-    private void submitChat(String message, String explicitSessionId, String mode) {
-        String worldId;
+        BuildChatContext context;
         try {
-            worldId = worldIdSupplier.get();
+            context = chatContextSupplier.get();
         } catch (Exception error) {
             statusSink.accept("chat submit failed: " + error.getMessage());
             return;
@@ -83,7 +76,7 @@ public final class BuildCommandController implements BuildBackendListener {
         mainExecutor.execute(() -> chatEvents.onUserMessage(message));
         workerExecutor.execute(() -> {
             try {
-                backend.submitChatMessage(message, clientId, worldId, finalSessionIdForRequest, mode);
+                backend.submitChatMessage(message, clientId, context, finalSessionIdForRequest);
             } catch (Exception error) {
                 mainExecutor.execute(() -> statusSink.accept("chat submit failed: " + error.getMessage()));
             }
@@ -104,8 +97,7 @@ public final class BuildCommandController implements BuildBackendListener {
             try {
                 String sessionId = backend.createSession(clientId, worldId);
                 activeSessionId = sessionId;
-                String message = "active session: " + sessionId;
-                mainExecutor.execute(() -> statusSink.accept(message));
+                mainExecutor.execute(() -> statusSink.accept("active session: " + sessionId));
             } catch (Exception error) {
                 mainExecutor.execute(() -> statusSink.accept("session new failed: " + error.getMessage()));
             }
@@ -124,17 +116,17 @@ public final class BuildCommandController implements BuildBackendListener {
         statusSink.accept("loading sessions...");
         workerExecutor.execute(() -> {
             try {
-                List<String> sessions = backend.listSessions(clientId, worldId);
+                List<SessionSummary> sessions = backend.listSessions(clientId, worldId);
                 String message;
                 if (sessions.isEmpty()) {
                     message = "No sessions";
                 } else {
                     List<String> rendered = new ArrayList<>(sessions.size());
-                    for (String sessionId : sessions) {
-                        if (sessionId.equals(activeSessionId)) {
-                            rendered.add("*" + sessionId);
+                    for (SessionSummary session : sessions) {
+                        if (session.sessionId().equals(activeSessionId)) {
+                            rendered.add("*" + session.sessionId());
                         } else {
-                            rendered.add(sessionId);
+                            rendered.add(session.sessionId());
                         }
                     }
                     message = String.join(", ", rendered);
@@ -172,14 +164,13 @@ public final class BuildCommandController implements BuildBackendListener {
     public void onStatus(String jobId, String stage, String message) {
         mainExecutor.execute(() -> {
             switch (stage) {
-                case "chat.delta" -> chatEvents.onAssistantDelta(message);
+                case "chat.delta" -> {
+                    chatEvents.onStatus(message);
+                    statusSink.accept(message);
+                }
                 case "chat.response" -> {
                     chatEvents.onAssistantMessage(message);
                     statusSink.accept("chat: " + message);
-                }
-                case "tool_status" -> {
-                    chatEvents.onToolStatus(message);
-                    statusSink.accept(message);
                 }
                 default -> statusSink.accept(stage + ": " + message);
             }
@@ -187,31 +178,15 @@ public final class BuildCommandController implements BuildBackendListener {
     }
 
     @Override
+    public void onBuildApply(BuildApplyRequest request) {
+        mainExecutor.execute(() -> {
+            statusSink.accept("applying build...");
+            buildApplyHandler.onBuildApply(request);
+        });
+    }
+
+    @Override
     public void onError(String jobId, String code, String message) {
         mainExecutor.execute(() -> statusSink.accept(code + ": " + message));
-    }
-
-    public void submitSearch(String query) {
-        statusSink.accept("searching...");
-        mainExecutor.execute(() -> chatEvents.onUserMessage("/search " + query));
-        workerExecutor.execute(() -> {
-            try {
-                backend.submitSearch(clientId, query);
-            } catch (Exception error) {
-                mainExecutor.execute(() -> statusSink.accept("search failed: " + error.getMessage()));
-            }
-        });
-    }
-
-    public void submitImagine(String prompt) {
-        statusSink.accept("imagining...");
-        mainExecutor.execute(() -> chatEvents.onUserMessage("/imagine " + prompt));
-        workerExecutor.execute(() -> {
-            try {
-                backend.submitImagine(clientId, prompt);
-            } catch (Exception error) {
-                mainExecutor.execute(() -> statusSink.accept("imagine failed: " + error.getMessage()));
-            }
-        });
     }
 }

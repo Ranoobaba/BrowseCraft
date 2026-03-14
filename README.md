@@ -1,84 +1,90 @@
 ![BrowseCraft Header](docs/header.svg)
 
-BrowseCraft is a hackathon prototype focused on one interface: `/chat`. The in-game agent inspects the world, reasons about space, and places blocks directly through tool calls.
+BrowseCraft is a build-only Minecraft assistant built around a single-shot voxel.exec pipeline.
+The model writes JavaScript against a small voxel DSL, the server executes that code against a headless world, and the Fabric mod applies the resulting absolute block diff in game.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  A["Minecraft + Fabric Mod"] -->|"/chat, /session"| B["FastAPI Backend"]
-  B -->|tool use + reasoning| E["Claude Sonnet 4.6 (default)"]
-  B <-->|tool.request / tool.response| A
-  B -->|sessions + blueprints persistence| F["Convex (optional)"]
-  B -->|long-term memory retrieval/store| G["Supermemory (optional)"]
-  B -->|observability spans| H["Laminar"]
+  A["Minecraft Fabric Mod"] -->|"POST /v1/chat + worldContext"| B["TypeScript Backend"]
+  B -->|"single model call"| C["Anthropic via Vercel AI SDK"]
+  B -->|"executeCode(world, code)"| D["sim package"]
+  D -->|"world diff"| B
+  B -->|"build.apply"| A
+  A -->|"build.result"| B
+  B -->|"chat.response"| A
+  D -->|"JSONL manifests"| E["veRL / TRL / downstream Python consumers"]
 ```
+
+## Repo Layout
+
+- `sim/`: TypeScript simulator, task generation, grading, collection, curriculum, and export
+- `backend/`: TypeScript HTTP/WebSocket server
+- `mod/`: Fabric client for snapshot capture, chat UI, and block application
 
 ## Quickstart
 
-1. Install dependencies and configure environment values.
-   ```bash
-   cd ~/BrowseCraft/backend
-   cp .env.example .env
-   # Fill API keys as needed
-   uv sync --extra dev
-   ```
-2. Run backend and mod tests.
-   ```bash
-   cd ~/BrowseCraft/backend && uv run pytest -q
-   cd ~/BrowseCraft/mod && gradle test
-   ```
-3. Run everything with one command, or start backend and client manually.
+1. Install workspace dependencies.
+
    ```bash
    cd ~/BrowseCraft
-   ./scripts/run-everything.sh
-   ```
-   Manual path:
-   ```bash
-   cd ~/BrowseCraft/backend && uv run browsecraft-backend
-   cd ~/BrowseCraft/mod && gradle runClient
+   pnpm install
    ```
 
-## Demo Commands
+2. Run package tests.
 
-- `/chat <message>`
-- `/blueprints save|load|list`
-- `/materials`
-- `/session new|list|switch <id>`
-- `/build-test` (fallback demo path)
+   ```bash
+   cd ~/BrowseCraft
+   pnpm --filter @browsecraft/sim test
+   pnpm --filter @browsecraft/backend test
+   cd ~/BrowseCraft/mod && gradle test
+   ```
 
-## RL Workflow (HUD + Headless Simulator)
+3. Start the backend and the client.
 
-RL development is implemented in `sim/src/browsecraft_sim/rl`.
+   ```bash
+   cd ~/BrowseCraft
+   pnpm --filter @browsecraft/backend dev
+   ```
 
-1. Generate deterministic tiered tasks:
    ```bash
-   cd ~/BrowseCraft-rl/sim
-   uv run python scripts/generate_hud_tasks.py --seed 7 --per-tier 10 --output remote_tasks.jsonl
+   cd ~/BrowseCraft/mod
+   gradle runClient
    ```
-2. Verify the HUD environment wiring:
-   ```bash
-   cd ~/BrowseCraft-rl/sim
-   uv run python scripts/run_hud_smoke.py --skip-debug
-   ```
-3. Run local HUD MCP dev server:
-   ```bash
-   cd ~/BrowseCraft-rl/sim
-   hud dev env:env
-   ```
-4. Run baseline evals (Claude only by default):
-   ```bash
-   cd ~/BrowseCraft-rl/sim
-   uv run python scripts/run_baseline_eval.py --tasks-file remote_tasks.jsonl
-   ```
-5. Collect and export trajectories:
-   ```bash
-   cd ~/BrowseCraft-rl/sim
-   uv run python scripts/collect_claude_trajectories.py --model claude-sonnet-4-6 --per-tier 1 --output raw_episodes.jsonl
-   uv run python scripts/export_trajectories.py --input raw_episodes.jsonl --output trajectories.jsonl
-   ```
-6. Export RFT tasks:
-   ```bash
-   cd ~/BrowseCraft-rl/sim
-   uv run python scripts/export_rft_tasks.py --trajectories trajectories.jsonl --output rft_tasks.jsonl
-   ```
+
+4. In game, use `/chat <message>` and `/session new|list|switch <id>`.
+
+## Training Data Pipeline
+
+Generate deterministic tasks:
+
+```bash
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim generate-tasks --mode build --seed 45 --count 2 --output sim/runs/build_seed45.jsonl
+```
+
+Collect trajectories:
+
+```bash
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim collect --mode build --model claude-sonnet-4-5 --seed 45 --per-tier 2 --output sim/runs/build.jsonl
+pnpm --filter @browsecraft/sim collect --mode text_qa --model claude-sonnet-4-5 --seed 45 --per-tier 2 --output sim/runs/text_qa.jsonl
+pnpm --filter @browsecraft/sim collect --mode creative --model claude-sonnet-4-5 --seed 45 --count 10 --output sim/runs/creative.jsonl
+```
+
+Export stage manifests:
+
+```bash
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim export --input sim/runs/all_episodes.jsonl --output-dir sim/runs/manifests
+```
+
+This emits:
+
+- `spatial-sft.jsonl`
+- `spatial-grpo.jsonl`
+- `creative-sft.jsonl`
+- `creative-grpo.jsonl`
+
+`seed=45` is the deterministic validation seed and is locked by the fixtures in `sim/test/fixtures`.

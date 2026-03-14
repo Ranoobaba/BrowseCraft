@@ -1,0 +1,4226 @@
+[
+  {
+    "expected_tool_calls": 1,
+    "family": "absolute_single_block",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:birch_planks",
+        "coordinate": {
+          "x": -2,
+          "y": 64,
+          "z": -1
+        },
+        "family": "absolute_single_block"
+      },
+      "difficulty": "easy"
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "Place one minecraft:birch_planks block at absolute coordinates (x=-2, y=64, z=-1).",
+    "seed": 2344372398521942542,
+    "setup_blocks": [],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -2,
+        "y": 64,
+        "z": -1
+      }
+    ],
+    "task_id": "t1_absolute:absolute_single_block:2344372398521942542:0",
+    "tier": "t1_absolute"
+  },
+  {
+    "expected_tool_calls": 1,
+    "family": "absolute_single_block",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:oak_planks",
+        "coordinate": {
+          "x": 1,
+          "y": 64,
+          "z": 4
+        },
+        "family": "absolute_single_block"
+      },
+      "difficulty": "easy"
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "Place one minecraft:oak_planks block at absolute coordinates (x=1, y=64, z=4).",
+    "seed": 13172433136195835184,
+    "setup_blocks": [],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": 1,
+        "y": 64,
+        "z": 4
+      }
+    ],
+    "task_id": "t1_absolute:absolute_single_block:13172433136195835184:1",
+    "tier": "t1_absolute"
+  },
+  {
+    "expected_tool_calls": 2,
+    "family": "relative_single_reference",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:deepslate_bricks",
+        "distance": 3,
+        "family": "relative_single_reference",
+        "reference": {
+          "x": -3,
+          "y": 64,
+          "z": -4
+        },
+        "relation": "east"
+      },
+      "distance": 3,
+      "relation": "east"
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "A minecraft:red_wool reference block is at (-3, 64, -4). Place one minecraft:deepslate_bricks block 3 blocks east of that reference.",
+    "seed": 3830162513632224207,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -3,
+        "y": 64,
+        "z": -4
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:deepslate_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -4
+      }
+    ],
+    "task_id": "t2_relative_single_ref:relative_single_reference:3830162513632224207:0",
+    "tier": "t2_relative_single_ref"
+  },
+  {
+    "expected_tool_calls": 1,
+    "family": "egocentric_relative",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:deepslate_bricks",
+        "distance": 1,
+        "family": "egocentric_relative",
+        "player_facing": "west",
+        "relation": "behind"
+      },
+      "distance": 1,
+      "frame": "player",
+      "relation": "behind"
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "west",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "Place one minecraft:deepslate_bricks block 1 blocks behind you.",
+    "seed": 8631136479494749540,
+    "setup_blocks": [],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:deepslate_bricks",
+        "x": 1,
+        "y": 64,
+        "z": 0
+      }
+    ],
+    "task_id": "t2_relative_single_ref:egocentric_relative:8631136479494749540:1",
+    "tier": "t2_relative_single_ref"
+  },
+  {
+    "expected_tool_calls": 2,
+    "family": "floor",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:birch_planks",
+        "depth": 4,
+        "family": "floor",
+        "origin": {
+          "x": -2,
+          "y": 64,
+          "z": -1
+        },
+        "width": 3
+      },
+      "depth": 4,
+      "width": 3
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "Build a flat minecraft:birch_planks floor covering x=-2..0 and z=-1..2 at y=64.",
+    "seed": 11126595785810229075,
+    "setup_blocks": [],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": true,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -2,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -2,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -2,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -1,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -1,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -1,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": 0,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": 0,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": 0,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": 0,
+        "y": 64,
+        "z": 2
+      }
+    ],
+    "task_id": "t3_primitives:floor:11126595785810229075:0",
+    "tier": "t3_primitives"
+  },
+  {
+    "expected_tool_calls": 2,
+    "family": "wall",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:stone_bricks",
+        "end_x": 4,
+        "family": "wall",
+        "height": 3,
+        "start_x": -2,
+        "z": -2
+      },
+      "height": 3,
+      "length": 7
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "Build a straight minecraft:stone_bricks wall from x=-2 to x=4 at z=-2. The wall should run from y=64 through y=66.",
+    "seed": 8588941719986606958,
+    "setup_blocks": [],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": true,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -2
+      }
+    ],
+    "task_id": "t3_primitives:wall:8588941719986606958:1",
+    "tier": "t3_primitives"
+  },
+  {
+    "expected_tool_calls": 4,
+    "family": "inside_room_through_doorway",
+    "metadata": {
+      "canonical_intent": {
+        "doorway_wall": "east",
+        "family": "inside_room_through_doorway",
+        "room_origin": {
+          "x": -6,
+          "y": 64,
+          "z": 1
+        },
+        "target_block": "minecraft:lantern"
+      },
+      "distractor": {
+        "base": {
+          "x": -18,
+          "y": 64,
+          "z": -18
+        },
+        "block_id": "minecraft:birch_planks",
+        "height": 3,
+        "kind": "pillar"
+      },
+      "requires_structure_inspection": true
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "There is an oak plank room with exactly one doorway. Place one minecraft:lantern on the floor tile immediately inside the doorway. An extra stone pillar is nearby, but it does not matter for this task.",
+    "seed": 5854459964279663563,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 66,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -6,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -5,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -5,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -5,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -5,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -5,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -5,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -4,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -4,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -4,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -4,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -4,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -4,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -3,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -3,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -3,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -3,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -3,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -3,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 66,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:oak_planks",
+        "x": -2,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 64,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 65,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 66,
+        "z": -18
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:lantern",
+        "x": -3,
+        "y": 64,
+        "z": 3
+      }
+    ],
+    "task_id": "t4_structure_relative:inside_room_through_doorway:5854459964279663563:0",
+    "tier": "t4_structure_relative"
+  },
+  {
+    "expected_tool_calls": 6,
+    "family": "marker_chain_place",
+    "metadata": {
+      "canonical_intent": {
+        "family": "marker_chain_place",
+        "markers": [
+          {
+            "block_id": "minecraft:red_wool",
+            "name": "red marker",
+            "x": -7,
+            "y": 64,
+            "z": -8
+          },
+          {
+            "block_id": "minecraft:blue_wool",
+            "name": "blue marker",
+            "x": -7,
+            "y": 64,
+            "z": -11
+          },
+          {
+            "block_id": "minecraft:green_wool",
+            "name": "green marker",
+            "x": -7,
+            "y": 64,
+            "z": -14
+          }
+        ],
+        "start_marker": "minecraft:red_wool",
+        "step_distance": 3,
+        "steps": [
+          "north",
+          "north"
+        ],
+        "target_block": "minecraft:gold_block"
+      },
+      "distractor": {
+        "base": {
+          "x": -18,
+          "y": 64,
+          "z": -18
+        },
+        "block_id": "minecraft:birch_planks",
+        "height": 3,
+        "kind": "pillar"
+      },
+      "hop_count": 2,
+      "requires_structure_inspection": true
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [],
+    "prompt": "Colored wool markers are placed nearby. Start at the red marker, move to the marker 3 blocks north of that marker, then move to the marker 3 blocks north of that marker, and then place one minecraft:gold_block one block above the final marker. An extra stone pillar is nearby, but it does not matter for this task.",
+    "seed": 14144638761240829859,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:red_wool",
+        "x": -7,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:blue_wool",
+        "x": -7,
+        "y": 64,
+        "z": -11
+      },
+      {
+        "block_id": "minecraft:green_wool",
+        "x": -7,
+        "y": 64,
+        "z": -14
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 64,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 65,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 66,
+        "z": -18
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:gold_block",
+        "x": -7,
+        "y": 65,
+        "z": -14
+      }
+    ],
+    "task_id": "t4_structure_relative:marker_chain_place:14144638761240829859:1",
+    "tier": "t4_structure_relative"
+  },
+  {
+    "expected_tool_calls": 8,
+    "family": "widen_or_reposition_opening",
+    "metadata": {
+      "canonical_intent": {
+        "center_x": 0,
+        "family": "widen_or_reposition_opening",
+        "wall_z": 4
+      },
+      "distractor": {
+        "base": {
+          "x": -18,
+          "y": 64,
+          "z": -18
+        },
+        "block_id": "minecraft:birch_planks",
+        "height": 3,
+        "kind": "pillar"
+      },
+      "requires_modification": true
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 4
+      }
+    ],
+    "prompt": "A stone_bricks wall has a 1-block-wide doorway near the center. Widen the doorway to 3 blocks wide while preserving all other wall blocks. A separate cobblestone marker sits off to the side and is irrelevant to this task.",
+    "seed": 15789853947278870549,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 64,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 65,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 66,
+        "z": -18
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": false,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:air",
+        "x": -1,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": -1,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": 1,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": 1,
+        "y": 65,
+        "z": 4
+      }
+    ],
+    "task_id": "t5_modification:widen_or_reposition_opening:15789853947278870549:0",
+    "tier": "t5_modification"
+  },
+  {
+    "expected_tool_calls": 8,
+    "family": "move_window_to_opposite_wall",
+    "metadata": {
+      "canonical_intent": {
+        "family": "move_window_to_opposite_wall",
+        "from_wall": "west",
+        "room_origin": {
+          "x": -1,
+          "y": 64,
+          "z": -3
+        },
+        "to_wall": "east"
+      },
+      "requires_modification": true
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 1
+      }
+    ],
+    "prompt": "Move the existing 2-by-2 window from the west wall to the east wall of the room. Seal the old opening with stone_bricks.",
+    "seed": 12740948135672231858,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 63,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 63,
+        "z": 1
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": true,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": 3,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": 3,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": 3,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:air",
+        "x": 3,
+        "y": 65,
+        "z": -1
+      }
+    ],
+    "task_id": "t5_modification:move_window_to_opposite_wall:12740948135672231858:1",
+    "tier": "t5_modification"
+  },
+  {
+    "expected_tool_calls": 8,
+    "family": "bridge_between_offset_towers",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:cobblestone",
+        "family": "bridge_between_offset_towers",
+        "left_base": {
+          "x": -7,
+          "y": 64,
+          "z": -2
+        },
+        "right_base": {
+          "x": 6,
+          "y": 64,
+          "z": 5
+        }
+      },
+      "compositional": true,
+      "distractor": {
+        "base": {
+          "x": -18,
+          "y": 64,
+          "z": -18
+        },
+        "block_id": "minecraft:birch_planks",
+        "height": 3,
+        "kind": "pillar"
+      }
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 67,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 67,
+        "z": 5
+      }
+    ],
+    "prompt": "Two stone towers are already built nearby. Do not build new towers or change the existing towers. Build only the missing one-block-wide L-shaped minecraft:cobblestone bridge in the air one block above the tower tops. Start directly above the west tower top, run straight east until you are aligned with the east tower, then turn once and continue along z until the bridge ends directly above the east tower top. Do not place any cobblestone on or inside the towers themselves. A separate cobblestone marker sits off to the side and is irrelevant to this task.",
+    "seed": 14566564131724517850,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": -7,
+        "y": 67,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone",
+        "x": 6,
+        "y": 67,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 64,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 65,
+        "z": -18
+      },
+      {
+        "block_id": "minecraft:birch_planks",
+        "x": -18,
+        "y": 66,
+        "z": -18
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": true,
+      "require_grounded": false,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -7,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -6,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -5,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -4,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -3,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -2,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": -1,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 0,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 1,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 2,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 3,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 4,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 5,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:cobblestone",
+        "x": 6,
+        "y": 68,
+        "z": 5
+      }
+    ],
+    "task_id": "t6_composition:bridge_between_offset_towers:14566564131724517850:0",
+    "tier": "t6_composition"
+  },
+  {
+    "expected_tool_calls": 8,
+    "family": "l_shaped_corridor_offset_rooms",
+    "metadata": {
+      "canonical_intent": {
+        "block_id": "minecraft:stone_bricks",
+        "family": "l_shaped_corridor_offset_rooms",
+        "first_room_origin": {
+          "x": -7,
+          "y": 64,
+          "z": -9
+        },
+        "second_room_origin": {
+          "x": 2,
+          "y": 64,
+          "z": 1
+        }
+      },
+      "compositional": true
+    },
+    "player": {
+      "dimension": "minecraft:overworld",
+      "facing": "north",
+      "x": 0,
+      "y": 64,
+      "z": 0
+    },
+    "preserved_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 5
+      }
+    ],
+    "prompt": "Two stone_bricks rooms with existing doorways are already built nearby. Do not rebuild or modify the rooms. Build only the missing one-block-wide L-shaped stone_bricks corridor shell between the two doorways, including the corridor floor, side walls, and roof. Leave the interior passage empty.",
+    "seed": 6342085039564040971,
+    "setup_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -7,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -6,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -5,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -4,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -9
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -3,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 64,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 65,
+        "z": 5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 6,
+        "y": 66,
+        "z": 5
+      }
+    ],
+    "structural_checks": {
+      "min_span": null,
+      "require_connected": false,
+      "require_grounded": false,
+      "span_axis": null
+    },
+    "target_blocks": [
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -2,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": -1,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 0,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 1,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 2,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": -8
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -7
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -6
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -5
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -4
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -3
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -2
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": -1
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 63,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 4,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 66,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 3,
+        "y": 65,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 64,
+        "z": 0
+      },
+      {
+        "block_id": "minecraft:stone_bricks",
+        "x": 5,
+        "y": 65,
+        "z": 0
+      }
+    ],
+    "task_id": "t6_composition:l_shaped_corridor_offset_rooms:6342085039564040971:1",
+    "tier": "t6_composition"
+  }
+]

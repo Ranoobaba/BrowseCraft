@@ -1,77 +1,73 @@
 # BrowseCraft RL Workflow
 
-This repository runs RL experiments against the headless voxel simulator and a HUD MCP environment.
+BrowseCraft RL data now comes from a single-turn voxel.exec pipeline.
+The model writes JavaScript once, the code runs against the headless voxel world, and the result is graded into JSONL manifests for downstream Python trainers.
 
-## 1. Task Generation
+## 1. Deterministic Task Generation
 
-Generate deterministic tasks for all tiers:
-
-```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/generate_hud_tasks.py --seed 7 --per-tier 100 --output remote_tasks.jsonl
-```
-
-Limit to specific tiers with `--tiers t1_absolute,t2_relative_single_ref`.
-
-## 2. Local Environment Validation
-
-Basic smoke checks:
+Use `seed=45` when validating generation changes.
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/run_hud_smoke.py --skip-debug
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim generate-tasks --mode build --seed 45 --count 2 --output sim/runs/build_seed45.jsonl
+pnpm --filter @browsecraft/sim generate-tasks --mode text-qa --seed 45 --count 2 --output sim/runs/text_qa_seed45.jsonl
+pnpm --filter @browsecraft/sim generate-tasks --mode creative --seed 45 --count 10 --output sim/runs/creative_seed45.jsonl
 ```
 
-HUD readiness check:
+## 2. Baselines
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/run_hud_smoke.py
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim baseline --model claude-sonnet-4-5 --seed 45 --per-tier 2
 ```
 
-## 3. Local MCP Development
+## 3. Trajectory Collection
+
+Spatial build tasks:
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-hud dev env:env
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim collect --mode build --model claude-sonnet-4-5 --seed 45 --per-tier 2 --output sim/runs/build.jsonl
 ```
 
-## 4. Baseline Evaluation (Claude-Only)
+Text QA:
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/run_baseline_eval.py --tasks-file remote_tasks.jsonl
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim collect --mode text_qa --model claude-sonnet-4-5 --seed 45 --per-tier 2 --output sim/runs/text_qa.jsonl
 ```
 
-Default models:
-
-- `claude-sonnet-4-6`
-- `claude-opus-4-6`
-
-## 5. Trajectory Export
-
-Collect raw episodes from real Claude tool loops:
+Creative building:
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/collect_claude_trajectories.py --model claude-sonnet-4-6 --per-tier 1 --output raw_episodes.jsonl
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim collect --mode creative --model claude-sonnet-4-5 --seed 45 --count 10 --output sim/runs/creative.jsonl
 ```
 
-Validate and export trajectory records:
+## 4. Analyze Trajectories
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/export_trajectories.py --input raw_episodes.jsonl --output trajectories.jsonl
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim analyze --input sim/runs/build.jsonl
 ```
 
-This validates Anthropic-format message blocks (`text`, `tool_use`, `tool_result`) before writing JSONL.
-
-## 6. RFT Task Export + Launch
+## 5. Export Stage Manifests
 
 ```bash
-cd ~/BrowseCraft-rl/sim
-uv run python scripts/export_rft_tasks.py --trajectories trajectories.jsonl --output rft_tasks.jsonl
-uv run python scripts/run_hud_rft.py --tasks-file rft_tasks.jsonl
+cd ~/BrowseCraft
+pnpm --filter @browsecraft/sim export --input sim/runs/all_episodes.jsonl --output-dir sim/runs/manifests
 ```
 
-`run_hud_rft.py` fails loudly on invite-only/access-denied signals.
+Stage outputs:
+
+- `spatial-sft.jsonl`
+- `spatial-grpo.jsonl`
+- `creative-sft.jsonl`
+- `creative-grpo.jsonl`
+
+## 6. Reward Rules
+
+- Build rewards are format-gated by execution success.
+- Efficiency uses primitive count.
+- GRPO always consumes `reward_normalized`.
+- Creative builds use heuristic prefiltering before the vision judge call.

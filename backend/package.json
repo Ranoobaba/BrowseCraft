@@ -1,0 +1,28 @@
+{
+  "name": "@browsecraft/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter @browsecraft/sim build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @browsecraft/sim build && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @browsecraft/sim build && vitest run",
+    "dev": "pnpm --filter @browsecraft/sim build && tsx watch src/server.ts",
+    "start": "node dist/src/server.js"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.2.10",
+    "@browsecraft/sim": "workspace:*",
+    "ai": "^4.3.16",
+    "dotenv": "^17.2.2",
+    "ws": "^8.18.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

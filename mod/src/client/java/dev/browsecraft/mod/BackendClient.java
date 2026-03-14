@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
@@ -25,8 +26,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.Objects;
 
 public final class BackendClient implements BuildBackend {
     private static final long RECONNECT_BASE_DELAY_MS = 500;
@@ -38,7 +37,6 @@ public final class BackendClient implements BuildBackend {
     private final ScheduledExecutorService reconnectExecutor;
     private final AtomicInteger reconnectAttempts = new AtomicInteger();
     private final AtomicLong connectionGeneration = new AtomicLong();
-    private final ToolRequestHandler toolRequestHandler;
 
     private volatile BuildBackendListener listener;
     private volatile WebSocket webSocket;
@@ -46,14 +44,7 @@ public final class BackendClient implements BuildBackend {
     private volatile boolean seenSuccessfulConnection;
 
     public BackendClient(BackendEndpoints endpoints, String mcVersion) {
-        this(endpoints, mcVersion, (tool, params) -> CompletableFuture.failedFuture(
-                new UnsupportedOperationException("Tool request handler is not configured")
-        ));
-    }
-
-    public BackendClient(BackendEndpoints endpoints, String mcVersion, ToolRequestHandler toolRequestHandler) {
-        this.endpoints = endpoints;
-        this.toolRequestHandler = Objects.requireNonNull(toolRequestHandler, "toolRequestHandler");
+        this.endpoints = Objects.requireNonNull(endpoints, "endpoints");
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .version(HttpClient.Version.HTTP_1_1)
@@ -77,17 +68,16 @@ public final class BackendClient implements BuildBackend {
     public void submitChatMessage(
             String message,
             String clientId,
-            String worldId,
-            String sessionId,
-            String mode
+            BuildChatContext context,
+            String sessionId
     ) throws IOException, InterruptedException {
         JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("client_id", clientId);
+        requestBody.addProperty("clientId", clientId);
         requestBody.addProperty("message", message);
-        requestBody.addProperty("world_id", worldId);
-        requestBody.addProperty("mode", mode);
+        requestBody.addProperty("worldId", context.worldId());
+        requestBody.add("worldContext", context.worldContext());
         if (sessionId != null && !sessionId.isBlank()) {
-            requestBody.addProperty("session_id", sessionId);
+            requestBody.addProperty("sessionId", sessionId);
         }
         postJson("/v1/chat", requestBody);
     }
@@ -95,63 +85,67 @@ public final class BackendClient implements BuildBackend {
     @Override
     public String createSession(String clientId, String worldId) throws IOException, InterruptedException {
         JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("client_id", clientId);
-        requestBody.addProperty("world_id", worldId);
+        requestBody.addProperty("clientId", clientId);
+        requestBody.addProperty("worldId", worldId);
         HttpResponse<String> response = postJson("/v1/session/new", requestBody);
         JsonObject payload = JsonParser.parseString(response.body()).getAsJsonObject();
-        return requiredString(payload, "session_id");
+        return requiredString(payload, "sessionId");
     }
 
     @Override
-    public List<String> listSessions(String clientId, String worldId) throws IOException, InterruptedException {
+    public List<SessionSummary> listSessions(String clientId, String worldId) throws IOException, InterruptedException {
         HttpResponse<String> response = getJson(
                 "/v1/session/list",
                 Map.of(
-                        "client_id", clientId,
-                        "world_id", worldId
+                        "clientId", clientId,
+                        "worldId", worldId
                 )
         );
-        JsonElement parsed = JsonParser.parseString(response.body());
-        JsonArray sessions = extractSessionsArray(parsed);
-
-        List<String> sessionIds = new ArrayList<>(sessions.size());
-        for (JsonElement entry : sessions) {
-            if (entry.isJsonPrimitive() && entry.getAsJsonPrimitive().isString()) {
-                sessionIds.add(entry.getAsString());
-                continue;
-            }
-            if (entry.isJsonObject()) {
-                sessionIds.add(requiredString(entry.getAsJsonObject(), "session_id"));
-                continue;
-            }
-            throw new IllegalArgumentException("Session list contains unsupported entry: " + entry);
+        JsonObject payload = JsonParser.parseString(response.body()).getAsJsonObject();
+        JsonArray sessions = payload.getAsJsonArray("sessions");
+        List<SessionSummary> result = new ArrayList<>(sessions.size());
+        for (JsonElement element : sessions) {
+            JsonObject session = element.getAsJsonObject();
+            result.add(new SessionSummary(
+                    requiredString(session, "sessionId"),
+                    requiredInt(session, "messageCount"),
+                    requiredString(session, "createdAt"),
+                    requiredString(session, "updatedAt")
+            ));
         }
-        return List.copyOf(sessionIds);
+        return List.copyOf(result);
     }
 
     @Override
     public void switchSession(String clientId, String worldId, String sessionId) throws IOException, InterruptedException {
         JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("client_id", clientId);
-        requestBody.addProperty("world_id", worldId);
-        requestBody.addProperty("session_id", sessionId);
+        requestBody.addProperty("clientId", clientId);
+        requestBody.addProperty("worldId", worldId);
+        requestBody.addProperty("sessionId", sessionId);
         postJson("/v1/session/switch", requestBody);
     }
 
     @Override
-    public void submitSearch(String clientId, String query) throws IOException, InterruptedException {
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("client_id", clientId);
-        requestBody.addProperty("query", query);
-        postJson("/v1/search", requestBody);
-    }
+    public void reportBuildResult(String jobId, BuildApplyResult result) {
+        WebSocket socket = this.webSocket;
+        if (socket == null) {
+            throw new IllegalStateException("Cannot report build result without an active WebSocket");
+        }
 
-    @Override
-    public void submitImagine(String clientId, String prompt) throws IOException, InterruptedException {
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("client_id", clientId);
-        requestBody.addProperty("prompt", prompt);
-        postJson("/v1/imagine", requestBody);
+        JsonObject payload = new JsonObject();
+        payload.addProperty("type", "build.result");
+        payload.addProperty("jobId", jobId);
+
+        JsonObject body = new JsonObject();
+        body.addProperty("success", result.success());
+        if (result.error() != null) {
+            body.addProperty("error", result.error());
+        }
+        body.addProperty("appliedCount", result.appliedCount());
+        body.addProperty("fillCount", result.fillCount());
+        body.addProperty("setblockCount", result.setblockCount());
+        payload.add("payload", body);
+        socket.sendText(gson.toJson(payload), true);
     }
 
     private HttpResponse<String> postJson(String endpoint, JsonObject requestBody) throws IOException, InterruptedException {
@@ -192,22 +186,6 @@ public final class BackendClient implements BuildBackend {
             throw new IOException("Backend returned status " + response.statusCode() + ": " + response.body());
         }
         return response;
-    }
-
-    private JsonArray extractSessionsArray(JsonElement parsed) {
-        if (parsed.isJsonArray()) {
-            return parsed.getAsJsonArray();
-        }
-        if (!parsed.isJsonObject()) {
-            throw new IllegalArgumentException("Expected JSON object or array for sessions response");
-        }
-
-        JsonObject object = parsed.getAsJsonObject();
-        JsonElement sessions = object.get("sessions");
-        if (sessions == null || !sessions.isJsonArray()) {
-            throw new IllegalArgumentException("Expected sessions array in response");
-        }
-        return sessions.getAsJsonArray();
     }
 
     @Override
@@ -262,24 +240,16 @@ public final class BackendClient implements BuildBackend {
         return Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * exponent);
     }
 
-    private void handleIncomingMessage(WebSocket socket, String message) {
+    private void handleIncomingMessage(String message) {
         JsonObject envelope = JsonParser.parseString(message).getAsJsonObject();
         String type = requiredString(envelope, "type");
-        if ("chat.response".equals(type)) {
-            handleChatResponse(envelope);
-            return;
-        }
-        if ("chat.delta".equals(type)) {
-            handleChatDelta(envelope);
-            return;
-        }
-        if ("chat.tool_status".equals(type)) {
-            handleToolStatus(envelope);
-            return;
-        }
-        if ("tool.request".equals(type)) {
-            handleToolRequest(socket, envelope);
-            return;
+        switch (type) {
+            case "chat.response" -> handleChatResponse(envelope);
+            case "chat.delta" -> handleChatDelta(envelope);
+            case "build.apply" -> handleBuildApply(envelope);
+            case "error" -> handleError(envelope);
+            default -> {
+            }
         }
     }
 
@@ -290,8 +260,11 @@ public final class BackendClient implements BuildBackend {
         }
 
         JsonObject payload = requiredObject(envelope, "payload");
-        String message = requiredString(payload, "message");
-        currentListener.onStatus("", "chat.response", message);
+        currentListener.onStatus(
+                requiredString(payload, "jobId"),
+                "chat.response",
+                requiredString(payload, "message")
+        );
     }
 
     private void handleChatDelta(JsonObject envelope) {
@@ -301,65 +274,51 @@ public final class BackendClient implements BuildBackend {
         }
 
         JsonObject payload = requiredObject(envelope, "payload");
-        String delta = payload.has("delta") ? requiredString(payload, "delta") : requiredString(payload, "partial");
-        currentListener.onStatus("", "chat.delta", delta);
+        currentListener.onStatus(
+                requiredString(payload, "jobId"),
+                "chat.delta",
+                requiredString(payload, "delta")
+        );
     }
 
-    private void handleToolStatus(JsonObject envelope) {
+    private void handleBuildApply(JsonObject envelope) {
         BuildBackendListener currentListener = listener;
         if (currentListener == null) {
             return;
         }
 
         JsonObject payload = requiredObject(envelope, "payload");
-        String status = requiredString(payload, "status");
-        currentListener.onStatus("", "tool_status", status);
-    }
-
-    private void handleToolRequest(WebSocket socket, JsonObject envelope) {
-        String requestId = null;
-        try {
-            requestId = requiredString(envelope, "request_id");
-            String tool = requiredString(envelope, "tool");
-            JsonObject params = requiredObject(envelope, "params");
-            CompletableFuture<JsonObject> dispatch = toolRequestHandler.handle(tool, params);
-            String responseRequestId = requestId;
-            dispatch.whenComplete((result, error) -> {
-                if (error != null) {
-                    sendToolError(socket, responseRequestId, rootCause(error));
-                    return;
-                }
-                if (result == null) {
-                    sendToolError(socket, responseRequestId, new IllegalStateException("Tool handler returned null result"));
-                    return;
-                }
-                sendToolResult(socket, responseRequestId, result);
-            });
-        } catch (RuntimeException error) {
-            if (requestId != null && !requestId.isEmpty()) {
-                sendToolError(socket, requestId, error);
-            }
+        JsonArray placementsJson = payload.getAsJsonArray("placements");
+        List<AbsoluteBuildPlacement> placements = new ArrayList<>(placementsJson.size());
+        for (JsonElement element : placementsJson) {
+            JsonObject placement = element.getAsJsonObject();
+            placements.add(new AbsoluteBuildPlacement(
+                    requiredInt(placement, "x"),
+                    requiredInt(placement, "y"),
+                    requiredInt(placement, "z"),
+                    requiredString(placement, "blockId")
+            ));
         }
+
+        currentListener.onBuildApply(new BuildApplyRequest(
+                requiredString(payload, "jobId"),
+                requiredString(payload, "worldId"),
+                requiredString(payload, "sessionId"),
+                requiredInt(payload, "primitiveCount"),
+                requiredDouble(payload, "executionTimeMs"),
+                List.copyOf(placements)
+        ));
     }
 
-    private void sendToolResult(WebSocket socket, String requestId, JsonObject result) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("type", "tool.response");
-        payload.addProperty("request_id", requestId);
-        payload.add("result", result);
-        socket.sendText(gson.toJson(payload), true);
-    }
-
-    private void sendToolError(WebSocket socket, String requestId, Throwable error) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("type", "tool.response");
-        payload.addProperty("request_id", requestId);
-        String message = error.getMessage();
-        if (message == null) {
-            message = error.toString();
+    private void handleError(JsonObject envelope) {
+        BuildBackendListener currentListener = listener;
+        if (currentListener == null) {
+            return;
         }
-        payload.addProperty("error", message);
-        socket.sendText(gson.toJson(payload), true);
+
+        JsonObject payload = requiredObject(envelope, "payload");
+        String jobId = payload.has("jobId") ? requiredString(payload, "jobId") : "";
+        currentListener.onError(jobId, requiredString(payload, "code"), requiredString(payload, "message"));
     }
 
     private String requiredString(JsonObject object, String key) {
@@ -370,19 +329,28 @@ public final class BackendClient implements BuildBackend {
         return element.getAsString();
     }
 
+    private int requiredInt(JsonObject object, String key) {
+        JsonElement element = object.get(key);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalArgumentException("Expected numeric field: " + key);
+        }
+        return element.getAsInt();
+    }
+
+    private double requiredDouble(JsonObject object, String key) {
+        JsonElement element = object.get(key);
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalArgumentException("Expected numeric field: " + key);
+        }
+        return element.getAsDouble();
+    }
+
     private JsonObject requiredObject(JsonObject object, String key) {
         JsonElement element = object.get(key);
         if (element == null || !element.isJsonObject()) {
             throw new IllegalArgumentException("Expected object field: " + key);
         }
         return element.getAsJsonObject();
-    }
-
-    private Throwable rootCause(Throwable error) {
-        if (error.getCause() == null) {
-            return error;
-        }
-        return error.getCause();
     }
 
     private final class SocketListener implements WebSocket.Listener {
@@ -405,7 +373,7 @@ public final class BackendClient implements BuildBackend {
             if (last) {
                 String message = pendingText.toString();
                 pendingText.setLength(0);
-                handleIncomingMessage(webSocket, message);
+                handleIncomingMessage(message);
             }
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);
@@ -421,10 +389,5 @@ public final class BackendClient implements BuildBackend {
         public void onError(WebSocket webSocket, Throwable error) {
             handleConnectionFailure(generation, error);
         }
-    }
-
-    @FunctionalInterface
-    public interface ToolRequestHandler {
-        CompletableFuture<JsonObject> handle(String tool, JsonObject params);
     }
 }
